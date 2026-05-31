@@ -108,6 +108,18 @@ pub fn run() {
                 audio.set_volume(models::VolumeKind::Kakon, settings.audio.kakon_volume);
             }
 
+            // TimerMachine に永続化された loop_mode を反映
+            {
+                let mut machine = match app_state.machine.lock() {
+                    Ok(g) => g,
+                    Err(poisoned) => {
+                        log::warn!("setup: TimerMachine mutex poisoned, recovering");
+                        poisoned.into_inner()
+                    }
+                };
+                machine.set_loop_mode(settings.behavior.loop_sessions);
+            }
+
             handle.manage(app_state);
 
             // ---------- クラッシュリカバリ (B7.1) ----------

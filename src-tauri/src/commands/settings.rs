@@ -43,6 +43,7 @@ pub async fn settings_set(
     }
 
     // 3) TimerMachine の config を次セッションから有効化 (E3: 現セッションは継続)
+    //    loop_mode は即時反映 (内部フラグの切替なので副作用なし)
     {
         let mut machine = match state.machine.lock() {
             Ok(g) => g,
@@ -51,8 +52,8 @@ pub async fn settings_set(
                 poisoned.into_inner()
             }
         };
-        // `From<&DurationsSettings> for TimerConfig` を使う
         machine.set_config((&settings.durations).into());
+        machine.set_loop_mode(settings.behavior.loop_sessions);
     }
 
     Ok(())

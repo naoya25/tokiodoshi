@@ -34,6 +34,10 @@ pub struct TimerMachine {
     /// 現セッションで `Completed` をすでに発火したか。先行発火を 1 回だけにするためのフラグ。
     /// `start()` / `reset()` / セッション遷移時にリセットする。
     completed_emitted: bool,
+    /// Work 完了後に自動で次のセッションを開始するか (設定からの反映)。
+    /// 自然完了 (poll() で end_at 到達) のときだけ働く。
+    /// skip / reset / pause→start 経由では発動しない。
+    loop_mode: bool,
 }
 
 impl TimerMachine {
@@ -51,7 +55,14 @@ impl TimerMachine {
             end_at: None,
             paused_remaining: None,
             completed_emitted: false,
+            loop_mode: false,
         }
+    }
+
+    /// セッション完了後に自動で次のセッションを開始するモードを切り替える。
+    /// 設定変更時に commands/settings から呼ぶ想定。即時反映する。
+    pub fn set_loop_mode(&mut self, enabled: bool) {
+        self.loop_mode = enabled;
     }
 
     /// 現在の状態スナップショット。
@@ -202,7 +213,7 @@ impl TimerMachine {
                     // 完了確定
                     self.state.remaining_seconds = 0;
                     self.state.session_count = self.state.session_count.saturating_add(1);
-                    let mut events = Vec::with_capacity(3);
+                    let mut events = Vec::with_capacity(4);
                     events.push(TimerEvent::Tick(0));
                     if !self.completed_emitted {
                         // poll が KAKON_LEAD_MS より遅れた場合 (例: スリープ復帰直後)
@@ -217,6 +228,12 @@ impl TimerMachine {
                         count: self.state.session_count,
                     });
                     self.completed_emitted = false;
+
+                    // ループモードなら次の Work セッションを即時開始
+                    // (自然完了経由のみ。skip/reset はループしない)
+                    if self.loop_mode {
+                        events.extend(self.start(now));
+                    }
                     events
                 } else if !self.completed_emitted && now >= pre_completion {
                     // 倒れアニメ開始タイミング: end_at の 280ms 前
@@ -339,6 +356,52 @@ mod tests {
         assert_eq!(s.phase, Phase::Idle);
         assert_eq!(s.session_count, 1);
         assert_eq!(s.remaining_seconds, 4);
+    }
+
+    #[test]
+    fn loop_mode_auto_starts_next_session_after_natural_completion() {
+        // loop_mode=true なら end_at 到達時に Idle 遷移直後 → Work 再開する
+        let mut m = TimerMachine::new(fast_config());
+        m.set_loop_mode(true);
+        let now = t0();
+        m.start(now);
+        // 先行 Completed を 280ms 前に発火させてから終端へ進める (実運用と同じ流れ)
+        let pre = now + Duration::from_secs(4) - Duration::from_millis(KAKON_LEAD_MS);
+        m.poll(pre);
+        let events = m.poll(now + Duration::from_secs(4));
+        // Tick(0) + StateChanged(Idle) + StateChanged(Work) の 3 件
+        // Completed は先行で出ているのでここには出ない
+        assert_eq!(events.len(), 3);
+        assert!(matches!(events[0], TimerEvent::Tick(0)));
+        assert!(matches!(events[1], TimerEvent::StateChanged { phase: Phase::Idle, count: 1 }));
+        assert!(matches!(events[2], TimerEvent::StateChanged { phase: Phase::Work, count: 1 }));
+        // 次セッションが Work で走行中
+        assert_eq!(m.state().phase, Phase::Work);
+        assert_eq!(m.state().remaining_seconds, 4);
+    }
+
+    #[test]
+    fn loop_mode_does_not_auto_start_after_skip() {
+        // skip 経由は loop_mode でも自動再開しない (ユーザー意図の中断)
+        let mut m = TimerMachine::new(fast_config());
+        m.set_loop_mode(true);
+        let now = t0();
+        m.start(now);
+        let events = m.skip(now + Duration::from_secs(1));
+        // Completed + StateChanged(Idle) のみ、Work 再開なし
+        assert!(events.iter().all(|e| !matches!(e, TimerEvent::StateChanged { phase: Phase::Work, .. })));
+        assert_eq!(m.state().phase, Phase::Idle);
+    }
+
+    #[test]
+    fn loop_mode_off_returns_to_idle_after_completion() {
+        // loop_mode=false (デフォルト) は従来通り Idle に戻って止まる
+        let mut m = TimerMachine::new(fast_config());
+        let now = t0();
+        m.start(now);
+        let events = m.poll(now + Duration::from_secs(4));
+        assert!(events.iter().all(|e| !matches!(e, TimerEvent::StateChanged { phase: Phase::Work, .. })));
+        assert_eq!(m.state().phase, Phase::Idle);
     }
 
     #[test]

@@ -33,6 +33,8 @@ export interface BehaviorSettings {
   launch_at_login: boolean;
   hide_dock_icon: boolean;
   auto_show_window_on_start: boolean;
+  /** セッション完了後に自動で次のセッションを開始する */
+  loop_sessions: boolean;
 }
 
 export interface AppearanceSettings {
@@ -91,6 +93,7 @@ export const DEFAULT_SETTINGS: Settings = {
     launch_at_login: false,
     hide_dock_icon: false,
     auto_show_window_on_start: true,
+    loop_sessions: false,
   },
   appearance: {
     theme: 'system',

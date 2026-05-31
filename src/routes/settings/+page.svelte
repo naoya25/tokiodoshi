@@ -36,6 +36,15 @@
           settingsStore.updateNested('durations', { work_seconds: s })}
       />
     </Row>
+
+    <Row label="ループ再生" note="完了後に自動で次のセッションを開始">
+      <Toggle
+        ariaLabel="ループ再生"
+        checked={settingsStore.settings.behavior.loop_sessions}
+        onChange={(v) =>
+          settingsStore.updateNested('behavior', { loop_sessions: v })}
+      />
+    </Row>
   </section>
 
   <section>

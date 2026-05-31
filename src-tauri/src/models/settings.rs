@@ -93,6 +93,10 @@ pub struct BehaviorSettings {
     pub launch_at_login: bool,
     pub hide_dock_icon: bool,
     pub auto_show_window_on_start: bool,
+    /// Work セッション完了後に自動で次のセッションを開始するか。
+    /// false の場合は Idle に戻って手動で start を待つ。
+    #[serde(default)]
+    pub loop_sessions: bool,
 }
 
 impl Default for BehaviorSettings {
@@ -101,6 +105,7 @@ impl Default for BehaviorSettings {
             launch_at_login: false,
             hide_dock_icon: false,
             auto_show_window_on_start: true,
+            loop_sessions: false,
         }
     }
 }
