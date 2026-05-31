@@ -111,10 +111,17 @@ impl TimerMachine {
                 } else {
                     None
                 };
-                vec![TimerEvent::StateChanged {
-                    phase: Phase::Work,
-                    count: self.state.session_count,
-                }]
+                // StateChanged + 初期 Tick(work_seconds) を同時発火。
+                // 特に loop_mode 経路では `timer_start` コマンド戻り値の applyState を
+                // 経由しないので、Tick を出さないと frontend の remaining_seconds が
+                // 古い値 (= 0) のまま新セッションが「00:00」表示で始まってしまう。
+                vec![
+                    TimerEvent::StateChanged {
+                        phase: Phase::Work,
+                        count: self.state.session_count,
+                    },
+                    TimerEvent::Tick(work_seconds),
+                ]
             }
             Phase::Paused => {
                 let remaining = self.paused_remaining.unwrap_or_else(|| {
@@ -344,8 +351,10 @@ mod tests {
         let mut m = TimerMachine::new(fast_config());
         let now = t0();
         let events = m.start(now);
-        assert_eq!(events.len(), 1);
+        // StateChanged(Work) + 初期 Tick(work_seconds) の 2 件
+        assert_eq!(events.len(), 2);
         assert!(matches!(events[0], TimerEvent::StateChanged { phase: Phase::Work, count: 0 }));
+        assert!(matches!(events[1], TimerEvent::Tick(4)));
         let s = m.state();
         assert_eq!(s.phase, Phase::Work);
         assert_eq!(s.remaining_seconds, 4);
@@ -418,13 +427,15 @@ mod tests {
         let pre = now + Duration::from_secs(4) - Duration::from_millis(KAKON_LEAD_MS);
         m.poll(pre);
         let events = m.poll(now + Duration::from_secs(4));
-        // Tick(0) + PlayKakonAudio + StateChanged(Idle) + StateChanged(Work) の 4 件
+        // Tick(0) + PlayKakonAudio + StateChanged(Idle) + StateChanged(Work) + Tick(4) の 5 件
         // Completed は先行で出ているのでここには出ない
-        assert_eq!(events.len(), 4);
+        // 最後の Tick(4) は loop_mode の自動 start() で発火される初期 Tick
+        assert_eq!(events.len(), 5);
         assert!(matches!(events[0], TimerEvent::Tick(0)));
         assert!(matches!(events[1], TimerEvent::PlayKakonAudio));
         assert!(matches!(events[2], TimerEvent::StateChanged { phase: Phase::Idle, count: 1 }));
         assert!(matches!(events[3], TimerEvent::StateChanged { phase: Phase::Work, count: 1 }));
+        assert!(matches!(events[4], TimerEvent::Tick(4)));
         // 次セッションが Work で走行中
         assert_eq!(m.state().phase, Phase::Work);
         assert_eq!(m.state().remaining_seconds, 4);

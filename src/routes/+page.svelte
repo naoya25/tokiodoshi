@@ -11,10 +11,13 @@
   const canReset = $derived(timerStore.phase !== 'idle' || timerStore.sessionCount > 0);
   const isIdle = $derived(timerStore.phase === 'idle');
 
-  // Idle のとき = 「次セッションの長さ」として作業時間設定値を見せる。
-  // 走行中 / Paused のときは現セッションの残り時間を見せる。
+  // Idle かつアニメ完了後 = 「次セッションの長さ」として設定値を見せる。
+  // 走行中 / Paused / カコン演出中は現セッションの残り時間を見せる。
+  // → アニメ最中 (isAnimating) は remaining_seconds=0 を維持して「00:00」を見せる。
   const displaySeconds = $derived(
-    isIdle ? settingsStore.settings.durations.work_seconds : timerStore.remainingSeconds,
+    isIdle && !timerStore.isAnimating
+      ? settingsStore.settings.durations.work_seconds
+      : timerStore.remainingSeconds,
   );
 
   function handleToggle() {
