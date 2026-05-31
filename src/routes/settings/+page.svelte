@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Row from '$lib/components/settings/Row.svelte';
-  import MinutesInput from '$lib/components/settings/MinutesInput.svelte';
+  import DurationInput from '$lib/components/settings/DurationInput.svelte';
   import Slider from '$lib/components/settings/Slider.svelte';
   import SegmentedControl from '$lib/components/settings/SegmentedControl.svelte';
   import Toggle from '$lib/components/settings/Toggle.svelte';
@@ -27,11 +27,11 @@
     <h2>時</h2>
 
     <Row label="作業" note="次のセッションから反映 / メイン画面でも編集可">
-      <MinutesInput
+      <DurationInput
         value={settingsStore.settings.durations.work_seconds}
         min={1}
-        max={180}
-        ariaLabel="作業時間（分）"
+        max={10 * 3600}
+        ariaLabel="作業時間"
         onChange={(s) =>
           settingsStore.updateNested('durations', { work_seconds: s })}
       />
