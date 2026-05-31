@@ -20,16 +20,16 @@ use std::time::{Duration, SystemTime};
 use crate::models::timer_state::TimerEvent;
 use crate::models::{Phase, SessionKind, TimerConfig, TimerState};
 
-/// フロントのカコン演出時間 (開始 → 倒れ → 静止 → 戻り終わり)。
+/// フロントのカコン演出時間 (開始 → 倒れ → 戻り終わり)。
 ///
 /// 実物のししおどしは「水が出て軽くなった後、反動で逆へ振れて石を打つ」瞬間にカコンが鳴る。
-/// フロントの `playKakon` シーケンス:
-///   `-12° → +12°` (280ms 倒れ) → 80ms 静止 → `+12° → -12°` (700ms 戻り)
-/// の戻り終わり (= 開始から 1060ms 後) が石にぶつかる瞬間 = カコン音タイミング。
+/// フロントの `playKakon` シーケンス: `-12° → +12°` (280ms) + `+12° → -12°` (780ms)
+/// = 戻り終わりまで 1060ms。これに WebView の event 受信遅延と
+/// requestAnimationFrame のフレーム境界誤差 (40ms 程度) を加えて 1100ms とする。
 ///
 /// バック側はこの分だけ `end_at` より前に `Completed` を発火することで、
 /// 戻り終わりがちょうど `end_at` (= タイマー 00:00) に一致する。
-const KAKON_LEAD_MS: u64 = 1060;
+const KAKON_LEAD_MS: u64 = 1100;
 
 pub struct TimerMachine {
     state: TimerState,

@@ -3,7 +3,7 @@ import { on } from '$lib/ipc/events';
 import * as timerIpc from '$lib/ipc/timer';
 import type { Phase, TimerState } from '$lib/types';
 import { tween, sleep } from '$lib/utils/tween';
-import { easeInOutCubic, easeInQuad } from '$lib/utils/easing';
+import { easeInQuad, easeOutCubic } from '$lib/utils/easing';
 
 /**
  * 筒の基本姿勢 (-12° = 水入り口がやや上向き)。
@@ -102,14 +102,15 @@ class TimerStore {
 
   /**
    * セッション完了時のカコン演出: `-12° → +12° → -12°` の往復だけ。
-   * バック側で `end_at - 280ms` に Completed が発火するので、
-   * 倒れ終わり (+12°) がちょうどタイマー 00:00 の瞬間 = カコン音タイミング。
+   * 実物のししおどしは「戻ってきて石を打つ瞬間」にカコンが鳴る。
+   * バック側が `end_at - KAKON_LEAD_MS` に Completed を先行発火するので、
+   * **戻り終わり**がちょうどタイマー 00:00 の瞬間 = カコン音タイミングになる。
    *
-   * シーケンス:
-   * 1. -12° → +12° (280ms easeInQuad、重みで倒れて石を打つ)
-   * 2. 静止 (80ms、カコン音が乗る瞬間)
-   * 3. +12° → -12° (700ms easeInOutCubic、ゆっくり元へ)
-   * 4. 余韻 (500ms)
+   * シーケンス (合計 1060ms 想定 — バック側 KAKON_LEAD_MS と整合):
+   * 1. -12° → +12° (280ms easeInQuad、重みで倒れて水排出)
+   * 2. +12° → -12° (780ms easeOutCubic、戻りつつ最後に「ピタッ」と着地)
+   *    sleep を削除して tween に統合 (setTimeout のジッターを避ける)
+   * 3. 余韻 (500ms)
    */
   private async playKakon(): Promise<void> {
     this.isAnimating = true;
@@ -118,8 +119,7 @@ class TimerStore {
     };
 
     await tween(this.tilt, 12, 280, setTilt, easeInQuad).done;
-    await sleep(80);
-    await tween(12, INITIAL_TILT, 700, setTilt, easeInOutCubic).done;
+    await tween(12, INITIAL_TILT, 780, setTilt, easeOutCubic).done;
     await sleep(500);
 
     this.isAnimating = false;
