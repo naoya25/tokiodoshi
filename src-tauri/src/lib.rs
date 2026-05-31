@@ -44,7 +44,11 @@ pub(crate) fn determine_was_completed(end_at_iso: &str, now: DateTime<Utc>) -> b
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    env_logger::init();
+    // INFO 以上を出す (デフォルトは ERROR のみで debug ログが見えない)
+    env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("info"),
+    )
+    .init();
 
     // panic_hook:
     // panic 時に AppHandle へアクセスできず active_session の save は実現困難

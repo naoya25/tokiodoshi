@@ -23,12 +23,12 @@ use crate::models::{Phase, SessionKind, TimerConfig, TimerState};
 /// フロントのカコン演出時間 (開始 → 倒れ → 戻り終わり)。
 ///
 /// 実物のししおどしは「水が出て軽くなった後、反動で逆へ振れて石を打つ」瞬間にカコンが鳴る。
-/// フロントの `playKakon` シーケンス: `-12° → +12°` (280ms) + `+12° → -12°` (780ms)
-/// = 戻り終わりまで 1060ms。アニメ実時間と完全に一致させて、戻り終わりが
+/// フロントの `playKakon` シーケンス: `-12° → +12°` (1000ms 倒れ) + `+12° → -12°` (500ms 戻り)
+/// = 戻り終わりまで 1500ms。アニメ実時間と完全に一致させて、戻り終わりが
 /// ちょうど `end_at` (= タイマー 00:00 = カコン音タイミング) に一致するようにする。
 ///
 /// ticker の poll 間隔 (TICK_INTERVAL_MS) を小さくすることでジッターを抑制している。
-const KAKON_LEAD_MS: u64 = 1060;
+const KAKON_LEAD_MS: u64 = 1500;
 
 pub struct TimerMachine {
     state: TimerState,
@@ -241,9 +241,14 @@ impl TimerMachine {
                     }
                     events
                 } else if !self.completed_emitted && now >= pre_completion {
-                    // 倒れアニメ開始タイミング: end_at の 280ms 前
+                    // 倒れアニメ開始タイミング: end_at の KAKON_LEAD_MS 前
                     let remaining = end_at.duration_since(now).unwrap_or(Duration::ZERO);
                     let secs = remaining.as_secs() as u32;
+                    let remaining_ms = remaining.as_millis();
+                    log::info!(
+                        "[machine] pre-completion fired: remaining={}ms (target lead={}ms), tick_secs={}",
+                        remaining_ms, KAKON_LEAD_MS, secs
+                    );
                     self.state.remaining_seconds = secs;
                     self.completed_emitted = true;
                     vec![
@@ -256,7 +261,16 @@ impl TimerMachine {
                     let remaining = end_at.duration_since(now).unwrap_or(Duration::ZERO);
                     let secs = remaining.as_secs() as u32;
                     self.state.remaining_seconds = secs;
-                    vec![TimerEvent::Tick(secs)]
+                    // `Tick(0)` は `now >= end_at` 経路の役割 (1 回だけ発火)。
+                    // pre_completion 経路 (Completed 先行発火) の後、end_at 到達までの
+                    // 1 秒間は `remaining < 1s` → `secs = 0` になるが、ここで
+                    // `Tick(0)` を返すと 50ms poll 毎に大量発火してカコン音が
+                    // debounce すり抜けで連発する。secs == 0 のときは何も発火しない。
+                    if secs == 0 {
+                        Vec::new()
+                    } else {
+                        vec![TimerEvent::Tick(secs)]
+                    }
                 }
             }
             _ => Vec::new(),

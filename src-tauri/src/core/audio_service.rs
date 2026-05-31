@@ -22,7 +22,7 @@ use std::io::BufReader;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 
@@ -30,6 +30,12 @@ use crate::models::{AudioMode, VolumeKind};
 
 const WATER_FILE: &str = "water-loop.mp3";
 const KAKON_FILE: &str = "kakon.mp3";
+
+/// kakon の連続再生を抑制するための最小間隔。
+/// `Tick(0)` が想定外に複数回発火しても (ticker のバグ・状態遷移ミス等)、
+/// 800ms 以内の再呼び出しはスキップして 1 音にする。
+/// 800ms は通常の kakon 音長より短いが、誤発火による重なりを防ぐには十分。
+const KAKON_MIN_INTERVAL: Duration = Duration::from_millis(800);
 
 /// フェードの総時間 (要件: 0.5s)。
 const FADE_DURATION: Duration = Duration::from_millis(500);
@@ -52,6 +58,8 @@ pub struct AudioService {
     master_volume: f32,
     water_volume: f32,
     kakon_volume: f32,
+    /// 直近 kakon 再生時刻。`KAKON_MIN_INTERVAL` 以内の再呼び出しを抑制するため。
+    last_kakon_at: Option<Instant>,
 }
 
 // SAFETY:
@@ -100,6 +108,7 @@ impl AudioService {
             master_volume: 0.7,
             water_volume: 0.3,
             kakon_volume: 0.6,
+            last_kakon_at: None,
         }
     }
 
@@ -198,10 +207,30 @@ impl AudioService {
     }
 
     /// kakon を 1 回再生する。Silent モードでは no-op。
+    ///
+    /// 連続呼び出しガード: 直近 `KAKON_MIN_INTERVAL` 以内に再生していたら無視する。
+    /// 通常運用では `Tick(0)` の発火は 1 セッション 1 回なので衝突しないが、
+    /// 万一 ticker / poll のバグで連発しても音が重ならない保険として入れている。
     pub fn play_kakon(&mut self) {
+        log::info!("[audio] play_kakon ENTER mode={:?}", self.mode);
         if self.mode == AudioMode::Silent {
             return;
         }
+
+        // 多重再生抑止
+        let now = Instant::now();
+        if let Some(prev) = self.last_kakon_at {
+            let elapsed = now.duration_since(prev).as_millis();
+            if now.duration_since(prev) < KAKON_MIN_INTERVAL {
+                log::info!(
+                    "[audio] kakon SKIPPED by debounce (prev was {}ms ago)",
+                    elapsed
+                );
+                return;
+            }
+        }
+        log::info!("[audio] kakon ACTUAL PLAY");
+
         let Some(handle) = &self.handle else { return };
         let Some(bytes) = &self.kakon_bytes else {
             return;
@@ -227,6 +256,7 @@ impl AudioService {
         sink.append(decoder);
         // detach: sink を drop しても再生が続くようにする
         sink.detach();
+        self.last_kakon_at = Some(now);
     }
 
     fn effective_water_volume(&self) -> f32 {

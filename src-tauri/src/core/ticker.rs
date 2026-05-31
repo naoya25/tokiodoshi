@@ -101,8 +101,9 @@ pub fn spawn(app: AppHandle) {
 
     tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(TICK_INTERVAL_MS));
-        // 1 tick 目を即時に消費し、以降は固定間隔で発火させる
-        // (Burst を避けるため Delay モードはデフォルト)
+        // poll 処理が 50ms より長引いた場合に missed tick が burst で連発するのを防ぐ。
+        // 古い tick はスキップして、最新の周期に追従する。
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             interval.tick().await;
             let now = SystemTime::now();
@@ -148,12 +149,26 @@ pub(crate) async fn dispatch_event(app: &AppHandle, event: &TimerEvent, snapshot
             if let Some(tray) = app.try_state::<tauri::tray::TrayIcon>() {
                 crate::tray::update_title(&tray, *remaining_seconds);
             }
+            // タイマー 00:00 到達 = playKakon の戻り終わりタイミング = カコン音タイミング。
+            // Completed イベントは KAKON_LEAD_MS 早いタイミング (アニメ開始) なので
+            // ここで再生せず、Tick(0) でだけ再生する。
+            if *remaining_seconds == 0 {
+                with_audio(app, |a| a.play_kakon());
+            }
         }
         TimerEvent::StateChanged { phase, count } => {
             emit_state_changed(app, *phase, *count);
             on_state_changed(app, *phase, snapshot).await;
         }
         TimerEvent::Completed { kind } => {
+            // 計測用ログ: Completed 発火時刻と end_at の差を出して、
+            // 実際にどれだけ end_at より前に発火しているか確認する
+            let now = std::time::SystemTime::now();
+            log::info!(
+                "[ticker] Completed kind={:?} emitted at {:?} (system time)",
+                kind,
+                now.duration_since(std::time::UNIX_EPOCH).ok()
+            );
             emit_completed(app, *kind);
             on_completed(app, *kind, snapshot).await;
         }
@@ -196,12 +211,11 @@ async fn on_state_changed(app: &AppHandle, phase: Phase, snapshot: &TimerState) 
 }
 
 /// `Completed` 副作用。
-/// - kakon 音
 /// - sessions テーブルへ INSERT
 /// - active_session を clear
+/// 注: カコン音は `Tick(0)` 受信時 (アニメ戻り終わり = タイマー 00:00) に鳴らすので
+/// ここでは再生しない。Completed は 1060ms 早いタイミングなので音的に同期しない。
 async fn on_completed(app: &AppHandle, kind: SessionKind, snapshot: &TimerState) {
-    with_audio(app, |a| a.play_kakon());
-
     let now = Utc::now();
     // planned_duration_seconds は完了直前の duration。snapshot は既に次フェーズへ
     // 遷移した後の値を持ち得るため、kind に基づいて TimerConfig から再取得する。

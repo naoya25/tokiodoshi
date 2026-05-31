@@ -106,10 +106,9 @@ class TimerStore {
    * バック側が `end_at - KAKON_LEAD_MS` に Completed を先行発火するので、
    * **戻り終わり**がちょうどタイマー 00:00 の瞬間 = カコン音タイミングになる。
    *
-   * シーケンス (合計 1060ms 想定 — バック側 KAKON_LEAD_MS と整合):
-   * 1. -12° → +12° (280ms easeInQuad、重みで倒れて水排出)
-   * 2. +12° → -12° (780ms easeOutCubic、戻りつつ最後に「ピタッ」と着地)
-   *    sleep を削除して tween に統合 (setTimeout のジッターを避ける)
+   * シーケンス (合計 1500ms 想定 — バック側 KAKON_LEAD_MS と整合):
+   * 1. -12° → +12° (1000ms easeInQuad、重みでゆっくり倒れて水排出)
+   * 2. +12° → -12° (500ms easeOutCubic、勢いよく戻って石にぶつかる)
    * 3. 余韻 (500ms)
    */
   private async playKakon(): Promise<void> {
@@ -118,8 +117,8 @@ class TimerStore {
       this.tilt = v;
     };
 
-    await tween(this.tilt, 12, 280, setTilt, easeInQuad).done;
-    await tween(12, INITIAL_TILT, 780, setTilt, easeOutCubic).done;
+    await tween(this.tilt, 12, 1000, setTilt, easeInQuad).done;
+    await tween(12, INITIAL_TILT, 500, setTilt, easeOutCubic).done;
     await sleep(500);
 
     this.isAnimating = false;
