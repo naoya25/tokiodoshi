@@ -24,12 +24,11 @@ use crate::models::{Phase, SessionKind, TimerConfig, TimerState};
 ///
 /// 実物のししおどしは「水が出て軽くなった後、反動で逆へ振れて石を打つ」瞬間にカコンが鳴る。
 /// フロントの `playKakon` シーケンス: `-12° → +12°` (280ms) + `+12° → -12°` (780ms)
-/// = 戻り終わりまで 1060ms。これに WebView の event 受信遅延と
-/// requestAnimationFrame のフレーム境界誤差 (40ms 程度) を加えて 1100ms とする。
+/// = 戻り終わりまで 1060ms。アニメ実時間と完全に一致させて、戻り終わりが
+/// ちょうど `end_at` (= タイマー 00:00 = カコン音タイミング) に一致するようにする。
 ///
-/// バック側はこの分だけ `end_at` より前に `Completed` を発火することで、
-/// 戻り終わりがちょうど `end_at` (= タイマー 00:00) に一致する。
-const KAKON_LEAD_MS: u64 = 1100;
+/// ticker の poll 間隔 (TICK_INTERVAL_MS) を小さくすることでジッターを抑制している。
+const KAKON_LEAD_MS: u64 = 1060;
 
 pub struct TimerMachine {
     state: TimerState,
