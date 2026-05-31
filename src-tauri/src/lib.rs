@@ -73,11 +73,19 @@ pub fn run() {
             // block_on は tauri::async_runtime のスレッドで動くので main runtime と衝突しない。
             let (settings, assets_dir) = tauri::async_runtime::block_on(async {
                 let settings = core::persistence::load_settings(&handle).await;
-                let assets_dir = handle
-                    .path()
-                    .resource_dir()
-                    .map(|p| p.join("assets"))
-                    .unwrap_or_else(|_| std::env::temp_dir().join("tokiodoshi-assets"));
+                // dev ビルドでは resource_dir() が target/debug/ を指すため、
+                // bundle.resources で同梱予定のアセットが存在しない。
+                // CARGO_MANIFEST_DIR (= src-tauri/) を起点にソースの assets/ を直接参照する。
+                // release ビルドでは bundle.resources でアプリバンドル内に同梱される。
+                let assets_dir = if cfg!(debug_assertions) {
+                    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets")
+                } else {
+                    handle
+                        .path()
+                        .resource_dir()
+                        .map(|p| p.join("assets"))
+                        .unwrap_or_else(|_| std::env::temp_dir().join("tokiodoshi-assets"))
+                };
                 (settings, assets_dir)
             });
 

@@ -5,6 +5,9 @@
 //! - フェーズは Idle / Work / Paused の 3 つだけ
 //! - 休憩フェーズは廃止 (Work 完了 → Idle に戻る)
 //! - `set_config()` は次の `start()` / `reset()` 時に commit (E3: 実行中は据え置き)
+//! - **カコン先行発火**: `Completed` イベントは `end_at - KAKON_LEAD_MS` の時点で
+//!   発火する。フロントが受信してから倒れアニメ開始 → ちょうど `end_at` 時刻に
+//!   筒が石にぶつかる視覚的タイミング。
 //!
 //! 仕様:
 //! - docs/spec/backend/design.md `TimerMachine 設計` 節
@@ -17,12 +20,20 @@ use std::time::{Duration, SystemTime};
 use crate::models::timer_state::TimerEvent;
 use crate::models::{Phase, SessionKind, TimerConfig, TimerState};
 
+/// フロントの倒れアニメ時間 (`-12° → +12°`, easeInQuad)。
+/// `end_at` のこの時間前に `Completed` イベントを発火することで、
+/// 倒れ終わりがちょうど `end_at` (= タイマー 00:00) に一致する。
+const KAKON_LEAD_MS: u64 = 280;
+
 pub struct TimerMachine {
     state: TimerState,
     config: TimerConfig,
     pending_config: Option<TimerConfig>,
     end_at: Option<SystemTime>,
     paused_remaining: Option<Duration>,
+    /// 現セッションで `Completed` をすでに発火したか。先行発火を 1 回だけにするためのフラグ。
+    /// `start()` / `reset()` / セッション遷移時にリセットする。
+    completed_emitted: bool,
 }
 
 impl TimerMachine {
@@ -39,6 +50,7 @@ impl TimerMachine {
             pending_config: None,
             end_at: None,
             paused_remaining: None,
+            completed_emitted: false,
         }
     }
 
@@ -68,6 +80,7 @@ impl TimerMachine {
         match self.state.phase {
             Phase::Idle => {
                 self.commit_pending_config();
+                self.completed_emitted = false;
                 let work_seconds = self.config.work_seconds;
                 self.state.current_duration_seconds = work_seconds;
                 self.state.remaining_seconds = work_seconds;
@@ -90,6 +103,8 @@ impl TimerMachine {
                 self.state.remaining_seconds = remaining.as_secs() as u32;
                 self.end_at = Some(now + remaining);
                 self.paused_remaining = None;
+                // resume 時に completed_emitted はリセットしない。
+                // pause 前に既に発火していたなら次の end_at 到達でも 2 重発火しない。
                 vec![TimerEvent::StateChanged {
                     phase: Phase::Work,
                     count: self.state.session_count,
@@ -133,6 +148,7 @@ impl TimerMachine {
         };
         self.end_at = None;
         self.paused_remaining = None;
+        self.completed_emitted = false;
         vec![TimerEvent::StateChanged {
             phase: Phase::Idle,
             count: 0,
@@ -140,30 +156,38 @@ impl TimerMachine {
     }
 
     /// skip(): Work 走行中のみ、現セッションを即完了扱いにして Idle へ。
-    /// Completed と Idle への StateChanged を返す。
+    /// Completed (まだ未発火なら) と Idle への StateChanged を返す。
     pub fn skip(&mut self, _now: SystemTime) -> Vec<TimerEvent> {
         match self.state.phase {
             Phase::Work => {
                 self.state.session_count = self.state.session_count.saturating_add(1);
+                let already_completed = self.completed_emitted;
                 self.transition_to_idle();
-                vec![
-                    TimerEvent::Completed {
+                let mut events = Vec::with_capacity(2);
+                if !already_completed {
+                    events.push(TimerEvent::Completed {
                         kind: SessionKind::Work,
-                    },
-                    TimerEvent::StateChanged {
-                        phase: Phase::Idle,
-                        count: self.state.session_count,
-                    },
-                ]
+                    });
+                }
+                events.push(TimerEvent::StateChanged {
+                    phase: Phase::Idle,
+                    count: self.state.session_count,
+                });
+                events
             }
             _ => Vec::new(),
         }
     }
 
     /// poll(now): ticker から定期的に呼ばれる。
-    /// - Work で end_at に達したら Tick(0) + Completed + StateChanged(Idle) を返す
-    /// - 走行中なら Tick(remaining) のみ
-    /// - Idle / Paused は空 Vec
+    ///
+    /// 発火順:
+    /// 1. `end_at - KAKON_LEAD_MS` を過ぎたら `Completed` を 1 回だけ発火 (倒れ開始)
+    /// 2. `end_at` に達したら `Tick(0)` + `StateChanged(Idle)` を発火 (= タイマー 00:00)
+    /// 3. それ以外は通常の `Tick(remaining)` のみ
+    ///
+    /// `Completed` と最終遷移が同じ poll で起きる場合 (大きな時間ジャンプ等) は
+    /// 同じ呼び出しで両方を返す。
     pub fn poll(&mut self, now: SystemTime) -> Vec<TimerEvent> {
         match self.state.phase {
             Phase::Work => {
@@ -171,20 +195,41 @@ impl TimerMachine {
                     Some(e) => e,
                     None => return Vec::new(),
                 };
+                let lead = Duration::from_millis(KAKON_LEAD_MS);
+                let pre_completion = end_at.checked_sub(lead).unwrap_or(end_at);
+
                 if now >= end_at {
+                    // 完了確定
                     self.state.remaining_seconds = 0;
                     self.state.session_count = self.state.session_count.saturating_add(1);
                     let mut events = Vec::with_capacity(3);
                     events.push(TimerEvent::Tick(0));
-                    events.push(TimerEvent::Completed {
-                        kind: SessionKind::Work,
-                    });
+                    if !self.completed_emitted {
+                        // poll が KAKON_LEAD_MS より遅れた場合 (例: スリープ復帰直後)
+                        // ここでまとめて Completed も発火する
+                        events.push(TimerEvent::Completed {
+                            kind: SessionKind::Work,
+                        });
+                    }
                     self.transition_to_idle();
                     events.push(TimerEvent::StateChanged {
                         phase: Phase::Idle,
                         count: self.state.session_count,
                     });
+                    self.completed_emitted = false;
                     events
+                } else if !self.completed_emitted && now >= pre_completion {
+                    // 倒れアニメ開始タイミング: end_at の 280ms 前
+                    let remaining = end_at.duration_since(now).unwrap_or(Duration::ZERO);
+                    let secs = remaining.as_secs() as u32;
+                    self.state.remaining_seconds = secs;
+                    self.completed_emitted = true;
+                    vec![
+                        TimerEvent::Tick(secs),
+                        TimerEvent::Completed {
+                            kind: SessionKind::Work,
+                        },
+                    ]
                 } else {
                     let remaining = end_at.duration_since(now).unwrap_or(Duration::ZERO);
                     let secs = remaining.as_secs() as u32;
@@ -205,6 +250,7 @@ impl TimerMachine {
         self.state.current_duration_seconds = work_seconds;
         self.end_at = None;
         self.paused_remaining = None;
+        self.completed_emitted = false;
     }
 }
 
@@ -256,19 +302,57 @@ mod tests {
     }
 
     #[test]
-    fn work_completion_emits_tick0_completed_and_state_changed_idle() {
+    fn completed_fires_before_end_at_by_kakon_lead_ms() {
+        // end_at - 280ms の時点で Completed が発火する (Tick とセットで)
         let mut m = TimerMachine::new(fast_config());
         let now = t0();
         m.start(now);
-        let events = m.poll(now + Duration::from_secs(4));
-        assert_eq!(events.len(), 3);
-        assert!(matches!(events[0], TimerEvent::Tick(0)));
+        // 280ms 前ぴったり
+        let pre = now + Duration::from_secs(4) - Duration::from_millis(KAKON_LEAD_MS);
+        let events = m.poll(pre);
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], TimerEvent::Tick(_)));
         assert!(matches!(events[1], TimerEvent::Completed { kind: SessionKind::Work }));
-        assert!(matches!(events[2], TimerEvent::StateChanged { phase: Phase::Idle, count: 1 }));
+        // 状態は Work のまま (end_at にはまだ到達していない)
+        assert_eq!(m.state().phase, Phase::Work);
+    }
+
+    #[test]
+    fn completed_is_emitted_only_once_then_state_changed_at_end_at() {
+        let mut m = TimerMachine::new(fast_config());
+        let now = t0();
+        m.start(now);
+        // 280ms 前で Completed 発火
+        let pre = now + Duration::from_secs(4) - Duration::from_millis(KAKON_LEAD_MS);
+        let _ = m.poll(pre);
+        // 100ms 後 (まだ end_at 未到達) は Tick のみ、Completed は再発火しない
+        let mid = pre + Duration::from_millis(100);
+        let events = m.poll(mid);
+        assert!(events.iter().all(|e| !matches!(e, TimerEvent::Completed { .. })));
+        // end_at に到達したら Tick(0) + StateChanged(Idle)、Completed は出ない
+        let end = now + Duration::from_secs(4);
+        let events = m.poll(end);
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], TimerEvent::Tick(0)));
+        assert!(matches!(events[1], TimerEvent::StateChanged { phase: Phase::Idle, count: 1 }));
         let s = m.state();
         assert_eq!(s.phase, Phase::Idle);
         assert_eq!(s.session_count, 1);
         assert_eq!(s.remaining_seconds, 4);
+    }
+
+    #[test]
+    fn large_time_jump_emits_completed_and_state_changed_in_one_poll() {
+        // Completed をまだ出していない状態で end_at を大きく超えた場合
+        // (スリープ復帰相当)、同じ poll で Tick(0) + Completed + StateChanged を返す
+        let mut m = TimerMachine::new(fast_config());
+        let now = t0();
+        m.start(now);
+        let events = m.poll(now + Duration::from_secs(3600));
+        assert_eq!(events.len(), 3);
+        assert!(matches!(events[0], TimerEvent::Tick(0)));
+        assert!(matches!(events[1], TimerEvent::Completed { kind: SessionKind::Work }));
+        assert!(matches!(events[2], TimerEvent::StateChanged { phase: Phase::Idle, count: 1 }));
     }
 
     #[test]
@@ -349,17 +433,4 @@ mod tests {
         assert_eq!(m.state().remaining_seconds, 30);
     }
 
-    #[test]
-    fn poll_handles_large_time_jump_as_single_completion() {
-        // macOS スリープ復帰相当: 大きな時間ジャンプでも 1 回で完了処理
-        let mut m = TimerMachine::new(fast_config());
-        let now = t0();
-        m.start(now);
-        // 1 時間後を poll しても 1 セッション分しか完了扱いにならない
-        let events = m.poll(now + Duration::from_secs(3600));
-        assert_eq!(events.len(), 3);
-        assert!(matches!(events[1], TimerEvent::Completed { kind: SessionKind::Work }));
-        assert_eq!(m.state().session_count, 1);
-        assert_eq!(m.state().phase, Phase::Idle);
-    }
 }

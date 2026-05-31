@@ -101,15 +101,15 @@ class TimerStore {
   }
 
   /**
-   * セッション完了時のカコン演出: `-12° → 0° → -12°` の往復だけ。
-   * 走行中は静止しているので、ここが唯一の動きになる。
+   * セッション完了時のカコン演出: `-12° → +12° → -12°` の往復だけ。
+   * バック側で `end_at - 280ms` に Completed が発火するので、
+   * 倒れ終わり (+12°) がちょうどタイマー 00:00 の瞬間 = カコン音タイミング。
    *
    * シーケンス:
-   * 1. 鳴る前の静寂 (400ms)
-   * 2. -12° → 0° (280ms easeInQuad、重みで一気に倒れて石を打つ)
-   * 3. 静止 (80ms、カコン音が乗る瞬間)
-   * 4. 0° → -12° (700ms easeInOutCubic、ゆっくり元へ)
-   * 5. 余韻 (500ms)
+   * 1. -12° → +12° (280ms easeInQuad、重みで倒れて石を打つ)
+   * 2. 静止 (80ms、カコン音が乗る瞬間)
+   * 3. +12° → -12° (700ms easeInOutCubic、ゆっくり元へ)
+   * 4. 余韻 (500ms)
    */
   private async playKakon(): Promise<void> {
     this.isAnimating = true;
@@ -117,10 +117,9 @@ class TimerStore {
       this.tilt = v;
     };
 
-    await sleep(400);
-    await tween(this.tilt, 0, 280, setTilt, easeInQuad).done;
+    await tween(this.tilt, 12, 280, setTilt, easeInQuad).done;
     await sleep(80);
-    await tween(0, INITIAL_TILT, 700, setTilt, easeInOutCubic).done;
+    await tween(12, INITIAL_TILT, 700, setTilt, easeInOutCubic).done;
     await sleep(500);
 
     this.isAnimating = false;
