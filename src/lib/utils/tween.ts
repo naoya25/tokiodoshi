@@ -15,8 +15,10 @@ export function tween(
 ): TweenHandle {
   let rafId: number | null = null;
   let cancelled = false;
+  let resolveDone!: () => void;
 
   const done = new Promise<void>((resolve) => {
+    resolveDone = resolve;
     const start = performance.now();
     const step = (now: number) => {
       if (cancelled) {
@@ -37,8 +39,10 @@ export function tween(
 
   return {
     cancel: () => {
+      if (cancelled) return;
       cancelled = true;
       if (rafId !== null) cancelAnimationFrame(rafId);
+      resolveDone();
     },
     done,
   };

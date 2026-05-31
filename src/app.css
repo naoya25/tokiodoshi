@@ -2,11 +2,21 @@
   --ji: #f2ebdb;
   --sumi: #1a1815;
 }
+
+/* data-theme="dark" が優先。未設定時は OS prefers-color-scheme に追従 */
 @media (prefers-color-scheme: dark) {
   :root {
     --ji: #14110d;
     --sumi: #c8c0ae;
   }
+}
+:root[data-theme='light'] {
+  --ji: #f2ebdb;
+  --sumi: #1a1815;
+}
+:root[data-theme='dark'] {
+  --ji: #14110d;
+  --sumi: #c8c0ae;
 }
 
 * {

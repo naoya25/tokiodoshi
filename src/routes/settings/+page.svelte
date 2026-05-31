@@ -1,38 +1,183 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import Row from '$lib/components/settings/Row.svelte';
+  import MinutesInput from '$lib/components/settings/MinutesInput.svelte';
+  import Slider from '$lib/components/settings/Slider.svelte';
+  import SegmentedControl from '$lib/components/settings/SegmentedControl.svelte';
+  import Toggle from '$lib/components/settings/Toggle.svelte';
   import { settingsStore } from '$lib/stores/settings.svelte';
+  import { applyTheme } from '$lib/utils/theme';
+  import type { AudioMode, Theme } from '$lib/types';
 
   onMount(() => {
     void settingsStore.init();
   });
 </script>
 
-<main>
-  <h1>設定</h1>
-  <p class="todo">設定 UI は Phase 5 で実装予定</p>
+<svelte:head>
+  <title>トキオドシ / 設定</title>
+</svelte:head>
 
-  <pre>{JSON.stringify(settingsStore.settings, null, 2)}</pre>
+<main>
+  <header>
+    <h1>設定</h1>
+  </header>
+
+  <section>
+    <h2>時</h2>
+
+    <Row label="作業" note="次のセッションから反映">
+      <MinutesInput
+        value={settingsStore.settings.durations.work_seconds}
+        min={1}
+        max={120}
+        ariaLabel="作業時間（分）"
+        onChange={(s) =>
+          settingsStore.updateNested('durations', { work_seconds: s })}
+      />
+    </Row>
+
+    <Row label="休憩" note="次のセッションから反映">
+      <MinutesInput
+        value={settingsStore.settings.durations.short_break_seconds}
+        min={1}
+        max={60}
+        ariaLabel="休憩時間（分）"
+        onChange={(s) =>
+          settingsStore.updateNested('durations', { short_break_seconds: s })}
+      />
+    </Row>
+
+    <Row label="長休憩" note="次のセッションから反映">
+      <MinutesInput
+        value={settingsStore.settings.durations.long_break_seconds}
+        min={1}
+        max={120}
+        ariaLabel="長休憩時間（分）"
+        onChange={(s) =>
+          settingsStore.updateNested('durations', { long_break_seconds: s })}
+      />
+    </Row>
+  </section>
+
+  <section>
+    <h2>音</h2>
+
+    <Row label="モード">
+      <SegmentedControl
+        ariaLabel="音モード"
+        value={settingsStore.settings.audio.mode}
+        options={[
+          { value: 'silent' as AudioMode, label: '無音' },
+          { value: 'kakon_only' as AudioMode, label: 'カコンのみ' },
+          { value: 'full' as AudioMode, label: '水音 + カコン' },
+        ]}
+        onChange={(v) => settingsStore.updateNested('audio', { mode: v })}
+      />
+    </Row>
+
+    <Row label="マスター音量">
+      <Slider
+        ariaLabel="マスター音量"
+        value={settingsStore.settings.audio.master_volume}
+        onChange={(v) => settingsStore.updateNested('audio', { master_volume: v })}
+      />
+    </Row>
+
+    <Row label="水音">
+      <Slider
+        ariaLabel="水音の音量"
+        value={settingsStore.settings.audio.water_volume}
+        disabled={settingsStore.settings.audio.mode !== 'full'}
+        onChange={(v) => settingsStore.updateNested('audio', { water_volume: v })}
+      />
+    </Row>
+
+    <Row label="カコン">
+      <Slider
+        ariaLabel="カコン音の音量"
+        value={settingsStore.settings.audio.kakon_volume}
+        disabled={settingsStore.settings.audio.mode === 'silent'}
+        onChange={(v) => settingsStore.updateNested('audio', { kakon_volume: v })}
+      />
+    </Row>
+  </section>
+
+  <section>
+    <h2>佇まい</h2>
+
+    <Row label="テーマ">
+      <SegmentedControl
+        ariaLabel="テーマ"
+        value={settingsStore.settings.appearance.theme}
+        options={[
+          { value: 'system' as Theme, label: '自動' },
+          { value: 'light' as Theme, label: '昼' },
+          { value: 'dark' as Theme, label: '夜' },
+        ]}
+        onChange={(v) => {
+          settingsStore.updateNested('appearance', { theme: v });
+          applyTheme(v);
+        }}
+      />
+    </Row>
+
+    <Row label="セッション開始時にウィンドウを前面化">
+      <Toggle
+        ariaLabel="セッション開始時にウィンドウを前面化"
+        checked={settingsStore.settings.behavior.auto_show_window_on_start}
+        onChange={(v) =>
+          settingsStore.updateNested('behavior', { auto_show_window_on_start: v })}
+      />
+    </Row>
+  </section>
+
+  <section>
+    <h2>起動</h2>
+
+    <Row label="ログイン時に自動起動">
+      <Toggle
+        ariaLabel="ログイン時に自動起動"
+        checked={settingsStore.settings.behavior.launch_at_login}
+        onChange={(v) =>
+          settingsStore.updateNested('behavior', { launch_at_login: v })}
+      />
+    </Row>
+
+    <Row label="Dock アイコンを隠す" note="変更には再起動が必要">
+      <Toggle
+        ariaLabel="Dock アイコンを隠す"
+        checked={settingsStore.settings.behavior.hide_dock_icon}
+        onChange={(v) =>
+          settingsStore.updateNested('behavior', { hide_dock_icon: v })}
+      />
+    </Row>
+  </section>
 </main>
 
 <style>
   main {
-    padding: 32px;
-    font-family: 'Hiragino Mincho ProN', serif;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 48px 32px 64px;
+  }
+  header {
+    margin-bottom: 40px;
   }
   h1 {
+    font-weight: 200;
+    letter-spacing: 0.4em;
+    font-size: 22px;
+    margin: 0;
+  }
+  section {
+    margin-bottom: 40px;
+  }
+  h2 {
     font-weight: 300;
-    letter-spacing: 0.2em;
-    font-size: 18px;
-  }
-  .todo {
-    opacity: 0.4;
-    font-size: 11px;
-    letter-spacing: 0.2em;
-  }
-  pre {
-    font-family: 'SF Mono', monospace;
-    font-size: 11px;
+    letter-spacing: 0.4em;
+    font-size: 12px;
     opacity: 0.5;
-    margin-top: 24px;
+    margin: 0 0 8px;
   }
 </style>
