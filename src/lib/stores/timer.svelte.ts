@@ -3,10 +3,14 @@ import { on } from '$lib/ipc/events';
 import * as timerIpc from '$lib/ipc/timer';
 import type { Phase, TimerState } from '$lib/types';
 import { tween, sleep } from '$lib/utils/tween';
-import { easeInOutCubic, easeInQuad, easeOutCubic } from '$lib/utils/easing';
+import { easeInOutCubic, easeInQuad } from '$lib/utils/easing';
 
+/**
+ * 筒の基本姿勢 (-12° = 水入り口がやや上向き)。
+ * 走行中は時間経過で角度を変えず、この姿勢で静止する。
+ * セッション完了時に一度だけ playKakon で 0° へ振れて石を打ち、戻る。
+ */
 const INITIAL_TILT = -12;
-const FULL_TILT = 12;
 
 class TimerStore {
   remainingSeconds = $state(0);
@@ -18,12 +22,6 @@ class TimerStore {
 
   private unlistenFns: UnlistenFn[] = [];
 
-  progress = $derived(
-    this.currentDurationSeconds > 0
-      ? 1 - this.remainingSeconds / this.currentDurationSeconds
-      : 0,
-  );
-
   async init(): Promise<void> {
     try {
       const state = await timerIpc.timerGetState();
@@ -34,9 +32,8 @@ class TimerStore {
 
     this.unlistenFns.push(
       await on('timer:tick', (p) => {
-        if (this.isAnimating) return;
+        // tilt は時間経過では変えない (走行中も -12° で静止)
         this.remainingSeconds = p.remaining_seconds;
-        this.updateTiltFromProgress();
       }),
       await on('timer:state_changed', (p) => {
         this.phase = p.phase;
@@ -60,15 +57,7 @@ class TimerStore {
     this.remainingSeconds = s.remaining_seconds;
     this.sessionCount = s.session_count;
     this.currentDurationSeconds = s.current_duration_seconds;
-    this.updateTiltFromProgress();
-  }
-
-  private updateTiltFromProgress(): void {
-    if (this.isAnimating) return;
-    if (this.phase === 'work') {
-      const p = Math.min(1, Math.max(0, this.progress));
-      this.tilt = INITIAL_TILT + p * (FULL_TILT - INITIAL_TILT);
-    } else {
+    if (!this.isAnimating) {
       this.tilt = INITIAL_TILT;
     }
   }
@@ -111,32 +100,32 @@ class TimerStore {
     }
   }
 
+  /**
+   * セッション完了時のカコン演出: `-12° → 0° → -12°` の往復だけ。
+   * 走行中は静止しているので、ここが唯一の動きになる。
+   *
+   * シーケンス:
+   * 1. 鳴る前の静寂 (400ms)
+   * 2. -12° → 0° (280ms easeInQuad、重みで一気に倒れて石を打つ)
+   * 3. 静止 (80ms、カコン音が乗る瞬間)
+   * 4. 0° → -12° (700ms easeInOutCubic、ゆっくり元へ)
+   * 5. 余韻 (500ms)
+   */
   private async playKakon(): Promise<void> {
     this.isAnimating = true;
     const setTilt = (v: number) => {
       this.tilt = v;
     };
 
-    // 1. 鳴る前の静寂
     await sleep(400);
+    await tween(this.tilt, 0, 280, setTilt, easeInQuad).done;
+    await sleep(80);
+    await tween(0, INITIAL_TILT, 700, setTilt, easeInOutCubic).done;
+    await sleep(500);
 
-    // 2. 重みで傾く: → +48°
-    await tween(this.tilt, 48, 420, setTilt, easeInQuad).done;
-
-    // 3. 排水の一拍
-    await sleep(180);
-
-    // 4. 反動で逆へ: 48° → -25°
-    await tween(48, -25, 310, setTilt, easeOutCubic).done;
-
-    // 5. 初期姿勢に戻る
-    await tween(-25, INITIAL_TILT, 900, setTilt, easeInOutCubic).done;
-
-    // 6. 余韻
-    await sleep(600);
     this.isAnimating = false;
   }
 }
 
 export const timerStore = new TimerStore();
-export { INITIAL_TILT, FULL_TILT };
+export { INITIAL_TILT };
