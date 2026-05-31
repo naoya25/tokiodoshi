@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Row from '$lib/components/settings/Row.svelte';
-  import DurationInput from '$lib/components/settings/DurationInput.svelte';
   import Slider from '$lib/components/settings/Slider.svelte';
   import SegmentedControl from '$lib/components/settings/SegmentedControl.svelte';
   import Toggle from '$lib/components/settings/Toggle.svelte';
@@ -22,30 +21,6 @@
   <header>
     <h1>設定</h1>
   </header>
-
-  <section>
-    <h2>時</h2>
-
-    <Row label="作業" note="次のセッションから反映 / メイン画面でも編集可">
-      <DurationInput
-        value={settingsStore.settings.durations.work_seconds}
-        min={1}
-        max={10 * 3600}
-        ariaLabel="作業時間"
-        onChange={(s) =>
-          settingsStore.updateNested('durations', { work_seconds: s })}
-      />
-    </Row>
-
-    <Row label="ループ再生" note="完了後に自動で次のセッションを開始">
-      <Toggle
-        ariaLabel="ループ再生"
-        checked={settingsStore.settings.behavior.loop_sessions}
-        onChange={(v) =>
-          settingsStore.updateNested('behavior', { loop_sessions: v })}
-      />
-    </Row>
-  </section>
 
   <section>
     <h2>音</h2>
@@ -115,6 +90,15 @@
         checked={settingsStore.settings.behavior.auto_show_window_on_start}
         onChange={(v) =>
           settingsStore.updateNested('behavior', { auto_show_window_on_start: v })}
+      />
+    </Row>
+
+    <Row label="ループ再生" note="完了後に自動で次のセッションを開始">
+      <Toggle
+        ariaLabel="ループ再生"
+        checked={settingsStore.settings.behavior.loop_sessions}
+        onChange={(v) =>
+          settingsStore.updateNested('behavior', { loop_sessions: v })}
       />
     </Row>
   </section>
