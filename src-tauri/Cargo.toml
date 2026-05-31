@@ -13,9 +13,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri         = { version = "2", features = ["tray-icon"] }
+tauri         = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-store = "2"
 tauri-plugin-sql   = { version = "2", features = ["sqlite"] }
+
+# Rust 側から直接 SQLite を叩く (tauri-plugin-sql の DbPool は pub(crate) のため)
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "macros"] }
 
 # 音再生
 rodio = { version = "0.20", default-features = false, features = ["mp3", "symphonia-mp3"] }
@@ -39,3 +42,7 @@ env_logger  = "0.11"
 
 [dev-dependencies]
 tokio-test = "0.4"
+# core::persistence のユニットテストで in-memory SQLite を叩くため
+# 0.31 で libsqlite3-sys 0.28 に上がる (sqlx 0.8 と links="sqlite3" が衝突しなくなる)
+rusqlite = "0.31"
+tempfile = "3"

@@ -1,38 +1,62 @@
 use thiserror::Error;
 
 /// アプリ全体で使うエラー型。
-/// フロントへ string 化して渡す (serde::Serialize 手動実装)。
-#[derive(Debug, Error)]
+/// フロントへは `to_string()` の結果を文字列として渡す (`serde::Serialize` を手動実装)。
+#[derive(Error, Debug)]
 pub enum AppError {
-    #[error("IO error: {0}")]
+    #[error("Io: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("Store error: {0}")]
+    #[error("Store: {0}")]
     Store(String),
 
-    #[error("SQL error: {0}")]
+    #[error("Sql: {0}")]
     Sql(String),
 
-    #[error("Audio error: {0}")]
+    #[error("Audio: {0}")]
     Audio(String),
 
-    #[error("Not found: {0}")]
+    #[error("NotFound: {0}")]
     NotFound(String),
-
-    #[error("Invalid argument: {0}")]
-    InvalidArg(String),
-
-    #[error("Internal error: {0}")]
-    Internal(String),
 }
 
 impl serde::Serialize for AppError {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        serializer.serialize_str(self.to_string().as_ref())
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.to_string().as_ref())
     }
 }
 
+/// `AppError` を返す `Result` の短縮形。
 pub type AppResult<T> = Result<T, AppError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_error_serialize_as_string() {
+        let e = AppError::Store("missing key".to_string());
+        let json = serde_json::to_string(&e).unwrap();
+        assert_eq!(json, "\"Store: missing key\"");
+
+        let e = AppError::Sql("syntax".to_string());
+        assert_eq!(serde_json::to_string(&e).unwrap(), "\"Sql: syntax\"");
+
+        let e = AppError::Audio("device".to_string());
+        assert_eq!(serde_json::to_string(&e).unwrap(), "\"Audio: device\"");
+
+        let e = AppError::NotFound("session 42".to_string());
+        assert_eq!(
+            serde_json::to_string(&e).unwrap(),
+            "\"NotFound: session 42\""
+        );
+
+        // `Io` は `std::io::Error` から `From` で変換できる
+        let io: std::io::Error =
+            std::io::Error::new(std::io::ErrorKind::NotFound, "missing.toml");
+        let e: AppError = io.into();
+        let json = serde_json::to_string(&e).unwrap();
+        assert!(json.starts_with("\"Io: "));
+        assert!(json.contains("missing.toml"));
+    }
+}

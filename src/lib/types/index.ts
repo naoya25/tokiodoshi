@@ -28,7 +28,6 @@ export interface AudioSettings {
   master_volume: number;
   water_volume: number;
   kakon_volume: number;
-  muted: boolean;
 }
 
 export interface BehaviorSettings {
@@ -91,7 +90,6 @@ export const DEFAULT_SETTINGS: Settings = {
     master_volume: 0.7,
     water_volume: 0.3,
     kakon_volume: 0.6,
-    muted: false,
   },
   behavior: {
     launch_at_login: false,
