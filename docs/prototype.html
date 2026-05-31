@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>トキオドシ</title>
+<style>
+  :root {
+    --ji   : #F2EBDB;  /* 地色 — 生成り */
+    --sumi : #1A1815;  /* 墨色 */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ji   : #14110D;
+      --sumi : #C8C0AE;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    font-family: "Hiragino Mincho ProN", "Yu Mincho", "Songti SC", serif;
+    background: var(--ji);
+    color: var(--sumi);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  main {
+    height: 100vh;
+    display: grid;
+    /* 不均整: 中央を避け、ししおどしを右寄り下寄りに */
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr auto 1fr;
+    padding: 6vh 8vw;
+  }
+
+  /* ししおどし: 右下の3分の1のエリアに */
+  .shishi {
+    grid-column: 2;
+    grid-row: 2;
+    width: 100%;
+    max-width: 360px;
+    aspect-ratio: 1 / 1;
+    justify-self: end;
+  }
+  .shishi svg { width: 100%; height: 100%; display: block; }
+
+  /* 筒の回転は SVG transform 属性（setAttribute）で行う。CSS transform は使わない。 */
+
+  /* 水の落下: 破線を下方向に一定速度で流す。点が連なって落ちて見える */
+  @keyframes water-fall {
+    from { stroke-dashoffset: 0; }
+    to   { stroke-dashoffset: -9; }  /* dasharray "3 6" の1周期 */
+  }
+  #water { animation: water-fall 0.55s linear infinite; }
+
+  /* タイマー: 左上の3分の1。数字を巨大に、ラベルを極小に。落差で階層 */
+  .timer {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: end;
+  }
+  .timer-num {
+    font-size: clamp(72px, 12vw, 144px);
+    font-weight: 200;
+    line-height: 0.9;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+  .timer-label {
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    margin-top: 16px;
+    opacity: 0.5;
+  }
+
+  /* 静止状態の質。chrome は常駐させない */
+  .chrome {
+    position: fixed;
+    inset: auto 0 0 0;
+    padding: 24px;
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+  }
+  body:hover .chrome,
+  body.menu-shown .chrome { opacity: 0.45; }
+
+  .chrome button {
+    background: none;
+    border: none;
+    font: inherit;
+    color: inherit;
+    letter-spacing: 0.3em;
+    cursor: pointer;
+    padding: 0;
+    opacity: 0.7;
+  }
+  .chrome button:hover { opacity: 1; }
+  .chrome button:disabled { opacity: 0.2; cursor: default; }
+
+  /* デモ操作（プロトタイプ確認用、控えめに） */
+  .demo {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+  }
+  body:hover .demo { opacity: 0.3; }
+  .demo select {
+    background: transparent;
+    border: none;
+    color: inherit;
+    font: inherit;
+    letter-spacing: 0.2em;
+    outline: none;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<main>
+  <div class="timer">
+    <div class="timer-num" id="timer-num">25:00</div>
+    <div class="timer-label" id="timer-label">仕</div>
+  </div>
+
+  <div class="shishi">
+    <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+      <!-- 1. 水（上から落ちる線、筒の先端=水入り口の真上に固定） -->
+      <!-- 軸 200 + 右に約 90px = 筒の右端(300)直前 = 水入り口 -->
+      <line id="water"
+            x1="290" y1="60" x2="290" y2="218"
+            stroke="currentColor" stroke-width="0.8"
+            stroke-linecap="round"
+            stroke-dasharray="3 6"
+            opacity="0.55"/>
+
+      <!-- 2. 筒（軸 200,240 を中心に rotate 属性で回転。CSS transform は使わない） -->
+      <!-- 初期 -12°: 水入り口（右）が上を向く、ししおどし本来の待機姿勢 -->
+      <g id="bamboo" transform="rotate(-12 200 240)">
+        <!-- 軸を非対称に: 左 60px / 右 100px。水入り口側を長くしてししおどしの構造を保つ -->
+        <rect x="140" y="232" width="160" height="16"
+              fill="none" stroke="currentColor" stroke-width="1.2"/>
+      </g>
+
+      <!-- 3. 軸（点）— 筒の回転中心と完全一致 -->
+      <circle cx="200" cy="240" r="2.5" fill="currentColor"/>
+    </svg>
+  </div>
+</main>
+
+<div class="chrome">
+  <button id="btn-toggle">始</button>
+  <button id="btn-reset" disabled>戻</button>
+</div>
+
+<div class="demo">
+  <select id="demo-speed">
+    <option value="1">25分</option>
+    <option value="60" selected>25秒</option>
+    <option value="150">10秒</option>
+  </select>
+</div>
+
+<script>
+  const PHASES = {
+    WORK:        { jp: '仕', baseSeconds: 1500 },
+    SHORT_BREAK: { jp: '休', baseSeconds: 300  },
+    LONG_BREAK:  { jp: '長休', baseSeconds: 900 },
+  };
+
+  const state = {
+    phase: 'WORK',
+    remaining: 0,
+    intervalId: null,
+    sessionCount: 0,
+    speedFactor: 60,
+    running: false,
+    animating: false,
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const bamboo  = $('bamboo');
+  const timerNum   = $('timer-num');
+  const timerLabel = $('timer-label');
+  const btnToggle  = $('btn-toggle');
+  const btnReset   = $('btn-reset');
+  const demoSpeed  = $('demo-speed');
+
+  // 軸の SVG 座標。筒はこの点を中心に rotate する以外の動きを一切しない
+  const AXIS_X = 200;
+  const AXIS_Y = 240;
+
+  // 待機時の傾き（負 = 水入り口が上を向く、ししおどし本来の姿勢）
+  const INITIAL_TILT = -12;
+  // 満水時の傾き
+  const FULL_TILT = 12;
+
+  // tween 用の内部状態
+  let currentDeg = INITIAL_TILT;
+  let tweenRafId = null;
+
+  const phaseSeconds = (p) => Math.max(1, Math.round(PHASES[p].baseSeconds / state.speedFactor));
+  const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  // 直接 rotate 属性を書き換える（CSS transform を介さないので軸ズレが起きない）
+  function applyRotation(deg) {
+    currentDeg = deg;
+    bamboo.setAttribute('transform', `rotate(${deg} ${AXIS_X} ${AXIS_Y})`);
+  }
+
+  // イージング付きで rotate を補間
+  function tween(toDeg, durationMs, easing = (t) => t) {
+    if (tweenRafId) cancelAnimationFrame(tweenRafId);
+    return new Promise((resolve) => {
+      const fromDeg = currentDeg;
+      const start = performance.now();
+      function step(now) {
+        const t = Math.min(1, (now - start) / durationMs);
+        const eased = easing(t);
+        applyRotation(fromDeg + (toDeg - fromDeg) * eased);
+        if (t < 1) tweenRafId = requestAnimationFrame(step);
+        else { tweenRafId = null; resolve(); }
+      }
+      tweenRafId = requestAnimationFrame(step);
+    });
+  }
+
+  // イージング
+  const easeInOutCubic = (t) => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2;
+  const easeInQuad     = (t) => t * t;
+  const easeOutCubic   = (t) => 1 - Math.pow(1 - t, 3);
+
+  function render() {
+    timerNum.textContent = fmt(state.remaining);
+    timerLabel.textContent = PHASES[state.phase].jp;
+
+    if (state.animating) return;
+
+    if (state.phase === 'WORK') {
+      const progress = 1 - (state.remaining / phaseSeconds(state.phase));
+      // 待機 -12°（水入り口上向き）→ 満水 +12°（水入り口下向き）
+      const tilt = INITIAL_TILT + progress * (FULL_TILT - INITIAL_TILT);
+      tween(tilt, 1200, easeInOutCubic);
+    } else {
+      tween(INITIAL_TILT, 1200, easeInOutCubic);
+    }
+  }
+
+  async function playKakon() {
+    state.animating = true;
+
+    // 1. 鳴る前の静寂
+    await sleep(400);
+
+    // 2. 重みでぐっと傾く: → 48°（水入り口が下を向き水排出）
+    await tween(48, 420, easeInQuad);
+
+    // 3. 排水の一拍
+    await sleep(180);
+
+    // 4. 反動で逆へ振れる: 48° → -25°（軽くなって石を打つ側が下がる）
+    await tween(-25, 310, easeOutCubic);
+
+    // 5. 初期姿勢に戻る: -25° → -12°
+    await tween(INITIAL_TILT, 900, easeInOutCubic);
+
+    // 6. 余韻
+    await sleep(600);
+    state.animating = false;
+  }
+
+  function tick() {
+    if (state.animating) return;
+    state.remaining -= 1;
+    if (state.remaining <= 0) {
+      clearInterval(state.intervalId);
+      state.intervalId = null;
+      onSessionComplete();
+      return;
+    }
+    render();
+  }
+
+  async function onSessionComplete() {
+    if (state.phase === 'WORK') {
+      state.sessionCount += 1;
+      await playKakon();
+      state.phase = (state.sessionCount % 4 === 0) ? 'LONG_BREAK' : 'SHORT_BREAK';
+    } else {
+      state.phase = 'WORK';
+    }
+    state.remaining = phaseSeconds(state.phase);
+    render();
+    start();
+  }
+
+  function start() {
+    if (state.intervalId) return;
+    state.running = true;
+    state.intervalId = setInterval(tick, 1000);
+    btnToggle.textContent = '止';
+    btnReset.disabled = false;
+  }
+
+  function pause() {
+    clearInterval(state.intervalId);
+    state.intervalId = null;
+    state.running = false;
+    btnToggle.textContent = '始';
+  }
+
+  function toggle() {
+    state.running ? pause() : start();
+  }
+
+  function reset() {
+    pause();
+    state.phase = 'WORK';
+    state.sessionCount = 0;
+    state.animating = false;
+    state.remaining = phaseSeconds('WORK');
+    tween(INITIAL_TILT, 600, easeInOutCubic);
+    btnReset.disabled = true;
+    render();
+  }
+
+  btnToggle.addEventListener('click', toggle);
+  btnReset.addEventListener('click', reset);
+
+  demoSpeed.addEventListener('change', (e) => {
+    state.speedFactor = parseInt(e.target.value, 10);
+    reset();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'SELECT') return;
+    if (e.code === 'Space') { e.preventDefault(); toggle(); }
+    else if (e.code === 'KeyR') { reset(); }
+  });
+
+  // モバイル等 hover が効かない環境向け: 起動直後 2秒だけ chrome を見せる
+  document.body.classList.add('menu-shown');
+  setTimeout(() => document.body.classList.remove('menu-shown'), 2200);
+
+  state.remaining = phaseSeconds('WORK');
+  applyRotation(INITIAL_TILT);  // 起動時から水入り口が上を向いている
+  render();
+</script>
+</body>
+</html>
