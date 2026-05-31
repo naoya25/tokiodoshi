@@ -35,7 +35,8 @@ body {
   color: var(--sumi);
   -webkit-font-smoothing: antialiased;
   user-select: none;
-  overflow: hidden;
+  /* スクロールはページ単位で許可。メインの没入感は +page.svelte 側で main 要素に
+     overflow: hidden を当てて担保する */
 }
 
 button:focus-visible {

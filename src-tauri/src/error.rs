@@ -13,6 +13,11 @@ pub enum AppError {
     #[error("Sql: {0}")]
     Sql(String),
 
+    /// 音再生周りのエラー。
+    /// 現在 `AudioService` は失敗を silent fallback で握りつぶす方針なので
+    /// production コードからは未使用。将来 rodio エラーを正面から扱うときに使うため
+    /// variant 自体は残しておく。
+    #[allow(dead_code)]
     #[error("Audio: {0}")]
     Audio(String),
 

@@ -94,6 +94,7 @@
 <style>
   main {
     height: 100vh;
+    overflow: hidden;
     display: grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr auto 1fr;

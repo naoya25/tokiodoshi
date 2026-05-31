@@ -21,7 +21,12 @@
 //!
 //! ## エラー処理
 //! - emit / DB INSERT 失敗時は `log::warn!` で記録するのみ。ループは継続 (E4 要件)。
-//! - パニックも `tokio::spawn` のタスク内に閉じ込め、メイン側へは伝播しない。
+//! - パニックも spawn したタスク内に閉じ込め、メイン側へは伝播しない。
+//!
+//! ## 重要: `tauri::async_runtime::spawn` を使うこと
+//! `tauri::Builder::default().setup()` 内では `tokio::spawn` を呼ぶと
+//! 「there is no reactor running」でパニックする。Tauri が管理する
+//! `async_runtime` (内部は tokio) 上で spawn する必要がある。
 //!
 //! ## 二重 spawn 防止
 //! `state.ticker_spawned.swap(true, SeqCst)` で false → true。
@@ -89,7 +94,7 @@ pub fn spawn(app: AppHandle) {
         }
     }
 
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(TICK_INTERVAL_MS));
         // 1 tick 目を即時に消費し、以降は固定間隔で発火させる
         // (Burst を避けるため Delay モードはデフォルト)
