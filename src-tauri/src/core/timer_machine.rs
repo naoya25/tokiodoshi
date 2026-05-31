@@ -20,15 +20,16 @@ use std::time::{Duration, SystemTime};
 use crate::models::timer_state::TimerEvent;
 use crate::models::{Phase, SessionKind, TimerConfig, TimerState};
 
-/// フロントのカコン演出時間 (開始 → 倒れ → 戻り終わり)。
-///
-/// 実物のししおどしは「水が出て軽くなった後、反動で逆へ振れて石を打つ」瞬間にカコンが鳴る。
-/// フロントの `playKakon` シーケンス: `-12° → +12°` (1000ms 倒れ) + `+12° → -12°` (500ms 戻り)
-/// = 戻り終わりまで 1500ms。アニメ実時間と完全に一致させて、戻り終わりが
-/// ちょうど `end_at` (= タイマー 00:00 = カコン音タイミング) に一致するようにする。
-///
-/// ticker の poll 間隔 (TICK_INTERVAL_MS) を小さくすることでジッターを抑制している。
+/// フロントの **アニメ開始** を `end_at` の何 ms 前に発火するか。
+/// フロントの `playKakon` は `-12° → +12°` (1000ms) + `+12° → -12°` (500ms) = 1500ms。
+/// このリードタイムでアニメ開始すると戻り終わりがちょうど `end_at` に重なる。
 const KAKON_LEAD_MS: u64 = 1500;
+
+/// **カコン音** を `end_at` の何 ms 前に発火するか。
+/// アニメ戻り終わり (= end_at) より少し早めに音を鳴らすことで、
+/// rodio の再生開始遅延や OS audio buffer を吸収し、聴覚的に石を打つ瞬間と
+/// 視覚的な戻り終わりが揃って感じられるようにする。
+const KAKON_AUDIO_LEAD_MS: u64 = 100;
 
 pub struct TimerMachine {
     state: TimerState,
@@ -39,6 +40,8 @@ pub struct TimerMachine {
     /// 現セッションで `Completed` をすでに発火したか。先行発火を 1 回だけにするためのフラグ。
     /// `start()` / `reset()` / セッション遷移時にリセットする。
     completed_emitted: bool,
+    /// 現セッションで `PlayKakonAudio` をすでに発火したか。1 回だけ鳴らすためのフラグ。
+    audio_emitted: bool,
     /// Work 完了後に自動で次のセッションを開始するか (設定からの反映)。
     /// 自然完了 (poll() で end_at 到達) のときだけ働く。
     /// skip / reset / pause→start 経由では発動しない。
@@ -60,6 +63,7 @@ impl TimerMachine {
             end_at: None,
             paused_remaining: None,
             completed_emitted: false,
+            audio_emitted: false,
             loop_mode: false,
         }
     }
@@ -97,6 +101,7 @@ impl TimerMachine {
             Phase::Idle => {
                 self.commit_pending_config();
                 self.completed_emitted = false;
+                self.audio_emitted = false;
                 let work_seconds = self.config.work_seconds;
                 self.state.current_duration_seconds = work_seconds;
                 self.state.remaining_seconds = work_seconds;
@@ -165,6 +170,7 @@ impl TimerMachine {
         self.end_at = None;
         self.paused_remaining = None;
         self.completed_emitted = false;
+        self.audio_emitted = false;
         vec![TimerEvent::StateChanged {
             phase: Phase::Idle,
             count: 0,
@@ -213,12 +219,14 @@ impl TimerMachine {
                 };
                 let lead = Duration::from_millis(KAKON_LEAD_MS);
                 let pre_completion = end_at.checked_sub(lead).unwrap_or(end_at);
+                let audio_lead = Duration::from_millis(KAKON_AUDIO_LEAD_MS);
+                let pre_audio = end_at.checked_sub(audio_lead).unwrap_or(end_at);
 
                 if now >= end_at {
                     // 完了確定
                     self.state.remaining_seconds = 0;
                     self.state.session_count = self.state.session_count.saturating_add(1);
-                    let mut events = Vec::with_capacity(4);
+                    let mut events = Vec::with_capacity(5);
                     events.push(TimerEvent::Tick(0));
                     if !self.completed_emitted {
                         // poll が KAKON_LEAD_MS より遅れた場合 (例: スリープ復帰直後)
@@ -227,18 +235,36 @@ impl TimerMachine {
                             kind: SessionKind::Work,
                         });
                     }
+                    if !self.audio_emitted {
+                        // ジャンプ経路でカコン音も未再生なら、ここで一緒に発火
+                        events.push(TimerEvent::PlayKakonAudio);
+                    }
                     self.transition_to_idle();
                     events.push(TimerEvent::StateChanged {
                         phase: Phase::Idle,
                         count: self.state.session_count,
                     });
                     self.completed_emitted = false;
+                    self.audio_emitted = false;
 
                     // ループモードなら次の Work セッションを即時開始
                     // (自然完了経由のみ。skip/reset はループしない)
                     if self.loop_mode {
                         events.extend(self.start(now));
                     }
+                    events
+                } else if !self.audio_emitted && now >= pre_audio {
+                    // カコン音タイミング: end_at の KAKON_AUDIO_LEAD_MS (100ms) 前。
+                    // 視覚 (アニメ戻り終わり) より少し早めに音を鳴らして同期感を出す。
+                    self.audio_emitted = true;
+                    let remaining = end_at.duration_since(now).unwrap_or(Duration::ZERO);
+                    let secs = remaining.as_secs() as u32;
+                    self.state.remaining_seconds = secs;
+                    let mut events = Vec::with_capacity(2);
+                    if secs > 0 {
+                        events.push(TimerEvent::Tick(secs));
+                    }
+                    events.push(TimerEvent::PlayKakonAudio);
                     events
                 } else if !self.completed_emitted && now >= pre_completion {
                     // 倒れアニメ開始タイミング: end_at の KAKON_LEAD_MS 前
@@ -287,6 +313,7 @@ impl TimerMachine {
         self.end_at = None;
         self.paused_remaining = None;
         self.completed_emitted = false;
+        self.audio_emitted = false;
     }
 }
 
@@ -365,12 +392,15 @@ mod tests {
         let mid = pre + Duration::from_millis(100);
         let events = m.poll(mid);
         assert!(events.iter().all(|e| !matches!(e, TimerEvent::Completed { .. })));
-        // end_at に到達したら Tick(0) + StateChanged(Idle)、Completed は出ない
+        // end_at に到達したら Tick(0) + PlayKakonAudio + StateChanged(Idle)、Completed は出ない
+        // (PlayKakonAudio は end_at - 100ms 経路で出るが、pre と end の間で poll してないので
+        // ここでまとめて発火する)
         let end = now + Duration::from_secs(4);
         let events = m.poll(end);
-        assert_eq!(events.len(), 2);
+        assert_eq!(events.len(), 3);
         assert!(matches!(events[0], TimerEvent::Tick(0)));
-        assert!(matches!(events[1], TimerEvent::StateChanged { phase: Phase::Idle, count: 1 }));
+        assert!(matches!(events[1], TimerEvent::PlayKakonAudio));
+        assert!(matches!(events[2], TimerEvent::StateChanged { phase: Phase::Idle, count: 1 }));
         let s = m.state();
         assert_eq!(s.phase, Phase::Idle);
         assert_eq!(s.session_count, 1);
@@ -388,12 +418,13 @@ mod tests {
         let pre = now + Duration::from_secs(4) - Duration::from_millis(KAKON_LEAD_MS);
         m.poll(pre);
         let events = m.poll(now + Duration::from_secs(4));
-        // Tick(0) + StateChanged(Idle) + StateChanged(Work) の 3 件
+        // Tick(0) + PlayKakonAudio + StateChanged(Idle) + StateChanged(Work) の 4 件
         // Completed は先行で出ているのでここには出ない
-        assert_eq!(events.len(), 3);
+        assert_eq!(events.len(), 4);
         assert!(matches!(events[0], TimerEvent::Tick(0)));
-        assert!(matches!(events[1], TimerEvent::StateChanged { phase: Phase::Idle, count: 1 }));
-        assert!(matches!(events[2], TimerEvent::StateChanged { phase: Phase::Work, count: 1 }));
+        assert!(matches!(events[1], TimerEvent::PlayKakonAudio));
+        assert!(matches!(events[2], TimerEvent::StateChanged { phase: Phase::Idle, count: 1 }));
+        assert!(matches!(events[3], TimerEvent::StateChanged { phase: Phase::Work, count: 1 }));
         // 次セッションが Work で走行中
         assert_eq!(m.state().phase, Phase::Work);
         assert_eq!(m.state().remaining_seconds, 4);
@@ -431,10 +462,12 @@ mod tests {
         let now = t0();
         m.start(now);
         let events = m.poll(now + Duration::from_secs(3600));
-        assert_eq!(events.len(), 3);
+        // Tick(0) + Completed + PlayKakonAudio + StateChanged(Idle) の 4 件
+        assert_eq!(events.len(), 4);
         assert!(matches!(events[0], TimerEvent::Tick(0)));
         assert!(matches!(events[1], TimerEvent::Completed { kind: SessionKind::Work }));
-        assert!(matches!(events[2], TimerEvent::StateChanged { phase: Phase::Idle, count: 1 }));
+        assert!(matches!(events[2], TimerEvent::PlayKakonAudio));
+        assert!(matches!(events[3], TimerEvent::StateChanged { phase: Phase::Idle, count: 1 }));
     }
 
     #[test]

@@ -72,6 +72,10 @@ pub enum TimerEvent {
     Tick(u32),
     StateChanged { phase: Phase, count: u32 },
     Completed { kind: SessionKind },
+    /// カコン音を再生するタイミング (= end_at の少し前)。
+    /// アニメ戻り終わりと聴覚的に同期させるため、フロントの emit はせず
+    /// ticker から `AudioService::play_kakon()` を呼ぶためだけに使う。
+    PlayKakonAudio,
 }
 
 #[cfg(test)]

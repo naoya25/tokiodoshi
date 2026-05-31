@@ -149,28 +149,22 @@ pub(crate) async fn dispatch_event(app: &AppHandle, event: &TimerEvent, snapshot
             if let Some(tray) = app.try_state::<tauri::tray::TrayIcon>() {
                 crate::tray::update_title(&tray, *remaining_seconds);
             }
-            // タイマー 00:00 到達 = playKakon の戻り終わりタイミング = カコン音タイミング。
-            // Completed イベントは KAKON_LEAD_MS 早いタイミング (アニメ開始) なので
-            // ここで再生せず、Tick(0) でだけ再生する。
-            if *remaining_seconds == 0 {
-                with_audio(app, |a| a.play_kakon());
-            }
+            // 注: カコン音はこの分岐では再生しない (Tick(0) は end_at 到達時 = アニメ戻り終わり)。
+            // 音は `PlayKakonAudio` イベント (end_at - KAKON_AUDIO_LEAD_MS) で再生される。
         }
         TimerEvent::StateChanged { phase, count } => {
             emit_state_changed(app, *phase, *count);
             on_state_changed(app, *phase, snapshot).await;
         }
         TimerEvent::Completed { kind } => {
-            // 計測用ログ: Completed 発火時刻と end_at の差を出して、
-            // 実際にどれだけ end_at より前に発火しているか確認する
-            let now = std::time::SystemTime::now();
-            log::info!(
-                "[ticker] Completed kind={:?} emitted at {:?} (system time)",
-                kind,
-                now.duration_since(std::time::UNIX_EPOCH).ok()
-            );
             emit_completed(app, *kind);
             on_completed(app, *kind, snapshot).await;
+        }
+        TimerEvent::PlayKakonAudio => {
+            // カコン音だけを再生 (フロントへの emit はなし)。
+            // 視覚アニメ戻り終わりの少し前 (= end_at - KAKON_AUDIO_LEAD_MS) に
+            // 鳴らすことで、聴覚的な「石を打つ瞬間」と視覚を同期させる。
+            with_audio(app, |a| a.play_kakon());
         }
     }
 }

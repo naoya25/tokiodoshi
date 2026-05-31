@@ -186,6 +186,8 @@ fn emit_timer_event(app: &AppHandle, event: &TimerEvent) {
             serde_json::json!({ "phase": phase, "count": count }),
         ),
         TimerEvent::Completed { kind } => app.emit("timer:completed", kind),
+        // PlayKakonAudio はバック内部の音再生トリガーのみ。フロントへの emit は不要。
+        TimerEvent::PlayKakonAudio => return,
     };
     if let Err(e) = result {
         log::warn!("tray: emit 失敗 {:?}: {}", event, e);
