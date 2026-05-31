@@ -69,13 +69,13 @@ mod tests {
 
         // ActiveSession も同様に `type` キーが出ること
         let a = ActiveSession {
-            r#type: SessionKind::ShortBreak,
+            r#type: SessionKind::Work,
             started_at: "2026-06-01T10:25:00.000Z".to_string(),
             planned_duration_seconds: 300,
             end_at: "2026-06-01T10:30:00.000Z".to_string(),
         };
         let aj = serde_json::to_string(&a).unwrap();
-        assert!(aj.contains("\"type\":\"short_break\""));
+        assert!(aj.contains("\"type\":\"work\""));
         assert!(aj.contains("\"end_at\":\"2026-06-01T10:30:00.000Z\""));
 
         // round-trip

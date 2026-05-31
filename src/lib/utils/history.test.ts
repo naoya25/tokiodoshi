@@ -40,10 +40,10 @@ describe('aggregateByDay', () => {
     const sessions = [
       mkSession({ id: 1, type: 'work', was_completed: true }),
       mkSession({ id: 2, type: 'work', was_completed: false }),
-      mkSession({ id: 3, type: 'short_break', was_completed: true }),
+      mkSession({ id: 3, type: 'work', was_completed: true }),
     ];
     const result = aggregateByDay(sessions, ['2026-06-01']);
-    expect(result[0].completedWork).toBe(1);
+    expect(result[0].completedWork).toBe(2);
     expect(result[0].totalSessions).toBe(3);
   });
 

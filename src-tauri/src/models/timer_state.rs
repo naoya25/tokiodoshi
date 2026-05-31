@@ -1,14 +1,16 @@
 use serde::{Deserialize, Serialize};
 
 /// TimerMachine の現フェーズ。
-/// フロント `src/lib/types/index.ts::Phase` と同期 (`"idle"`, `"work"`, `"short_break"`, `"long_break"`, `"paused"`)。
+/// フロント `src/lib/types/index.ts::Phase` と同期 (`"idle"`, `"work"`, `"paused"`)。
+///
+/// MVP では休憩フェーズを廃止し、単純な作業タイマーに簡略化している
+/// (Work 完了 → Idle へ戻るだけ)。将来再導入する場合はこの enum と
+/// `TimerMachine::poll()` の遷移ロジックを同時に拡張する。
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum Phase {
     Idle,
     Work,
-    ShortBreak,
-    LongBreak,
     Paused,
 }
 
@@ -18,14 +20,12 @@ impl Default for Phase {
     }
 }
 
-/// 履歴に保存される種類。Phase の `Paused` / `Idle` は含まない。
-/// フロント `SessionKind` と同期 (`"work"`, `"short_break"`, `"long_break"`)。
+/// 履歴に保存されるセッションの種類。MVP では `Work` のみ。
+/// 将来の拡張余地として enum で残す (variant を増やすだけで OK)。
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionKind {
     Work,
-    ShortBreak,
-    LongBreak,
 }
 
 /// フロントに返す現在のタイマー状態のスナップショット。
@@ -50,22 +50,15 @@ impl Default for TimerState {
 }
 
 /// タイマー長設定 (秒単位)。`Settings::durations` から派生する。
+/// MVP では `work_seconds` のみ。
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct TimerConfig {
     pub work_seconds: u32,
-    pub short_break_seconds: u32,
-    pub long_break_seconds: u32,
-    pub sessions_until_long_break: u32,
 }
 
 impl Default for TimerConfig {
     fn default() -> Self {
-        Self {
-            work_seconds: 1500,
-            short_break_seconds: 300,
-            long_break_seconds: 900,
-            sessions_until_long_break: 4,
-        }
+        Self { work_seconds: 1500 }
     }
 }
 
@@ -73,10 +66,7 @@ impl Default for TimerConfig {
 ///
 /// - `Tick(remaining_seconds)` は走行中 1 秒ごと
 /// - `StateChanged { phase, count }` はフェーズ遷移時
-/// - `Completed { kind }` はセッション完了時 (kind は `Paused` / `Idle` を含まない)
-///
-/// `core/ticker.rs` がこれらを `timer:tick` / `timer:state_changed` / `timer:completed`
-/// イベントの emit payload に変換する。Serialize は不要 (内部 enum)。
+/// - `Completed { kind }` はセッション完了時 (kind は MVP では `Work` のみ)
 #[derive(Debug, Clone, PartialEq)]
 pub enum TimerEvent {
     Tick(u32),
@@ -90,18 +80,14 @@ mod tests {
 
     #[test]
     fn phase_serialize_snake_case() {
-        // フロント TS との整合性 (`"short_break"`, `"long_break"` 等)
         assert_eq!(serde_json::to_string(&Phase::Idle).unwrap(), "\"idle\"");
         assert_eq!(serde_json::to_string(&Phase::Work).unwrap(), "\"work\"");
-        assert_eq!(
-            serde_json::to_string(&Phase::ShortBreak).unwrap(),
-            "\"short_break\""
-        );
-        assert_eq!(
-            serde_json::to_string(&Phase::LongBreak).unwrap(),
-            "\"long_break\""
-        );
         assert_eq!(serde_json::to_string(&Phase::Paused).unwrap(), "\"paused\"");
+    }
+
+    #[test]
+    fn session_kind_serialize_snake_case() {
+        assert_eq!(serde_json::to_string(&SessionKind::Work).unwrap(), "\"work\"");
     }
 
     #[test]
@@ -113,12 +99,16 @@ mod tests {
             current_duration_seconds: 1500,
         };
         let json = serde_json::to_string(&s).unwrap();
-        // フロント TS が期待するキー名がそのまま出ること
         assert!(json.contains("\"phase\":\"work\""));
         assert!(json.contains("\"remaining_seconds\":1234"));
         assert!(json.contains("\"session_count\":2"));
         assert!(json.contains("\"current_duration_seconds\":1500"));
         let back: TimerState = serde_json::from_str(&json).unwrap();
         assert_eq!(back, s);
+    }
+
+    #[test]
+    fn timer_config_default_is_25min() {
+        assert_eq!(TimerConfig::default().work_seconds, 1500);
     }
 }

@@ -175,9 +175,6 @@ async fn on_state_changed(app: &AppHandle, phase: Phase, snapshot: &TimerState) 
                 log::warn!("ticker: save_active_session failed: {e}");
             }
         }
-        Phase::ShortBreak | Phase::LongBreak => {
-            with_audio(app, |a| a.stop_water());
-        }
         Phase::Idle | Phase::Paused => {
             with_audio(app, |a| a.stop_water());
             if matches!(phase, Phase::Idle) {
@@ -307,12 +304,11 @@ mod tests {
     #[test]
     fn state_changed_payload_uses_phase_and_session_count_keys() {
         let p = StateChangedPayload {
-            phase: Phase::ShortBreak,
+            phase: Phase::Idle,
             session_count: 2,
         };
         let json = serde_json::to_string(&p).unwrap();
-        // snake_case の `short_break` が出ること、`session_count` キー名
-        assert!(json.contains("\"phase\":\"short_break\""));
+        assert!(json.contains("\"phase\":\"idle\""));
         assert!(json.contains("\"session_count\":2"));
     }
 
@@ -325,11 +321,5 @@ mod tests {
         };
         let json = serde_json::to_string(&p).unwrap();
         assert_eq!(json, "{\"type\":\"work\"}");
-
-        // LongBreak も同様
-        let p2 = CompletedPayload {
-            kind: SessionKind::LongBreak,
-        };
-        assert_eq!(serde_json::to_string(&p2).unwrap(), "{\"type\":\"long_break\"}");
     }
 }

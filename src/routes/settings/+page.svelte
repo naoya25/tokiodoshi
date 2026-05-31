@@ -26,36 +26,14 @@
   <section>
     <h2>時</h2>
 
-    <Row label="作業" note="次のセッションから反映">
+    <Row label="作業" note="次のセッションから反映 / メイン画面でも編集可">
       <MinutesInput
         value={settingsStore.settings.durations.work_seconds}
         min={1}
-        max={120}
+        max={180}
         ariaLabel="作業時間（分）"
         onChange={(s) =>
           settingsStore.updateNested('durations', { work_seconds: s })}
-      />
-    </Row>
-
-    <Row label="休憩" note="次のセッションから反映">
-      <MinutesInput
-        value={settingsStore.settings.durations.short_break_seconds}
-        min={1}
-        max={60}
-        ariaLabel="休憩時間（分）"
-        onChange={(s) =>
-          settingsStore.updateNested('durations', { short_break_seconds: s })}
-      />
-    </Row>
-
-    <Row label="長休憩" note="次のセッションから反映">
-      <MinutesInput
-        value={settingsStore.settings.durations.long_break_seconds}
-        min={1}
-        max={120}
-        ariaLabel="長休憩時間（分）"
-        onChange={(s) =>
-          settingsStore.updateNested('durations', { long_break_seconds: s })}
       />
     </Row>
   </section>

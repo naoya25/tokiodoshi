@@ -236,12 +236,11 @@ fn format_title(remaining_seconds: u32) -> String {
 }
 
 /// Phase → アイコンファイル名のマッピング。
-/// Idle / Paused は idle、ShortBreak / LongBreak は break、Work は work。
+/// Idle / Paused は idle、Work は work。
 fn phase_to_icon_name(phase: Phase) -> &'static str {
     match phase {
         Phase::Idle | Phase::Paused => "tray-idle.png",
         Phase::Work => "tray-work.png",
-        Phase::ShortBreak | Phase::LongBreak => "tray-break.png",
     }
 }
 
@@ -284,9 +283,4 @@ mod tests {
         assert_eq!(phase_to_icon_name(Phase::Paused), "tray-idle.png");
     }
 
-    #[test]
-    fn phase_to_icon_name_short_and_long_break_share_icon() {
-        assert_eq!(phase_to_icon_name(Phase::ShortBreak), "tray-break.png");
-        assert_eq!(phase_to_icon_name(Phase::LongBreak), "tray-break.png");
-    }
 }

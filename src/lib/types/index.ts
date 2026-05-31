@@ -1,9 +1,11 @@
-// Rust 側 `src-tauri/src/models/` と手書きで同期するTypeScript 型定義
-// Rust 側を変更したら、このファイルも必ず合わせて更新すること
+// Rust 側 `src-tauri/src/models/` と手書きで同期する TypeScript 型定義。
+// Rust 側を変更したら、このファイルも必ず合わせて更新すること。
+//
+// MVP では休憩フェーズを廃止し、Phase は idle / work / paused のみ。
 
-export type Phase = 'idle' | 'work' | 'short_break' | 'long_break' | 'paused';
+export type Phase = 'idle' | 'work' | 'paused';
 
-export type SessionKind = 'work' | 'short_break' | 'long_break';
+export type SessionKind = 'work';
 
 export interface TimerState {
   phase: Phase;
@@ -18,9 +20,6 @@ export type Theme = 'system' | 'light' | 'dark';
 
 export interface DurationsSettings {
   work_seconds: number;
-  short_break_seconds: number;
-  long_break_seconds: number;
-  sessions_until_long_break: number;
 }
 
 export interface AudioSettings {
@@ -81,9 +80,6 @@ export type EventMap = {
 export const DEFAULT_SETTINGS: Settings = {
   durations: {
     work_seconds: 1500,
-    short_break_seconds: 300,
-    long_break_seconds: 900,
-    sessions_until_long_break: 4,
   },
   audio: {
     mode: 'full',

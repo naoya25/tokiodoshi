@@ -32,14 +32,6 @@ describe('phaseLabel', () => {
     expect(phaseLabel('work')).toBe('仕');
   });
 
-  it('short_break -> 休', () => {
-    expect(phaseLabel('short_break')).toBe('休');
-  });
-
-  it('long_break -> 長休', () => {
-    expect(phaseLabel('long_break')).toBe('長休');
-  });
-
   it('paused -> 止', () => {
     expect(phaseLabel('paused')).toBe('止');
   });

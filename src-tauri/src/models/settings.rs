@@ -44,23 +44,19 @@ pub enum VolumeKind {
     Kakon,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+/// 作業セッションの長さ (秒)。MVP では `work_seconds` のみ。
+///
+/// 旧フィールド `short_break_seconds` / `long_break_seconds` /
+/// `sessions_until_long_break` は休憩フェーズ廃止に伴い削除済み。
+/// 既存の settings.json に古いキーが残っていても serde が無視する。
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct DurationsSettings {
     pub work_seconds: u32,
-    pub short_break_seconds: u32,
-    pub long_break_seconds: u32,
-    pub sessions_until_long_break: u32,
 }
 
 impl Default for DurationsSettings {
     fn default() -> Self {
-        // docs/requirements.md §6.1 のデフォルト値
-        Self {
-            work_seconds: 1500,
-            short_break_seconds: 300,
-            long_break_seconds: 900,
-            sessions_until_long_break: 4,
-        }
+        Self { work_seconds: 1500 }
     }
 }
 
@@ -68,9 +64,6 @@ impl From<&DurationsSettings> for TimerConfig {
     fn from(d: &DurationsSettings) -> Self {
         TimerConfig {
             work_seconds: d.work_seconds,
-            short_break_seconds: d.short_break_seconds,
-            long_break_seconds: d.long_break_seconds,
-            sessions_until_long_break: d.sessions_until_long_break,
         }
     }
 }
@@ -141,12 +134,8 @@ mod tests {
 
     #[test]
     fn settings_default_matches_spec() {
-        // docs/requirements.md §6.1 と DEFAULT_SETTINGS (TS) の一致を担保
         let s = Settings::default();
         assert_eq!(s.durations.work_seconds, 1500);
-        assert_eq!(s.durations.short_break_seconds, 300);
-        assert_eq!(s.durations.long_break_seconds, 900);
-        assert_eq!(s.durations.sessions_until_long_break, 4);
 
         assert_eq!(s.audio.mode, AudioMode::Full);
         assert!((s.audio.master_volume - 0.7).abs() < f32::EPSILON);
@@ -162,29 +151,24 @@ mod tests {
 
     #[test]
     fn settings_full_round_trip_matches_ts_keys() {
-        // フロント TS の DEFAULT_SETTINGS と互換のキー名で出ること
         let s = Settings::default();
         let json = serde_json::to_string(&s).unwrap();
 
-        // durations
         assert!(json.contains("\"work_seconds\":1500"));
-        assert!(json.contains("\"short_break_seconds\":300"));
-        assert!(json.contains("\"long_break_seconds\":900"));
-        assert!(json.contains("\"sessions_until_long_break\":4"));
+        // 旧フィールドは含まれない
+        assert!(!json.contains("\"short_break_seconds\""));
+        assert!(!json.contains("\"long_break_seconds\""));
+        assert!(!json.contains("\"sessions_until_long_break\""));
 
-        // audio (muted は廃止済み)
         assert!(json.contains("\"mode\":\"full\""));
         assert!(json.contains("\"master_volume\":0.7"));
         assert!(json.contains("\"water_volume\":0.3"));
         assert!(json.contains("\"kakon_volume\":0.6"));
-        assert!(!json.contains("\"muted\""));
 
-        // behavior
         assert!(json.contains("\"launch_at_login\":false"));
         assert!(json.contains("\"hide_dock_icon\":false"));
         assert!(json.contains("\"auto_show_window_on_start\":true"));
 
-        // appearance
         assert!(json.contains("\"theme\":\"system\""));
 
         let back: Settings = serde_json::from_str(&json).unwrap();
@@ -193,7 +177,6 @@ mod tests {
 
     #[test]
     fn settings_partial_update_replaces_field() {
-        // settings_set で部分的に変えても、他フィールドが温存できる流れの確認。
         let mut s = Settings::default();
         s.audio.mode = AudioMode::Silent;
         s.audio.master_volume = 0.1;
@@ -205,9 +188,7 @@ mod tests {
         assert_eq!(back.audio.mode, AudioMode::Silent);
         assert!((back.audio.master_volume - 0.1).abs() < f32::EPSILON);
         assert_eq!(back.durations.work_seconds, 60);
-        // 触っていない箇所はデフォルトのまま
         assert_eq!(back.appearance.theme, Theme::System);
         assert!(back.behavior.auto_show_window_on_start);
-        assert_eq!(back.durations.long_break_seconds, 900);
     }
 }

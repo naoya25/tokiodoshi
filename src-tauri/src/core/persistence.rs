@@ -301,16 +301,15 @@ fn map_sqlx_err(e: sqlx::Error) -> AppError {
 fn session_kind_str(k: SessionKind) -> &'static str {
     match k {
         SessionKind::Work => "work",
-        SessionKind::ShortBreak => "short_break",
-        SessionKind::LongBreak => "long_break",
     }
 }
 
 fn str_to_session_kind(s: &str) -> AppResult<SessionKind> {
     match s {
         "work" => Ok(SessionKind::Work),
-        "short_break" => Ok(SessionKind::ShortBreak),
-        "long_break" => Ok(SessionKind::LongBreak),
+        // 互換性: 旧 DB に残っている短/長休憩レコードは Work として読み込む
+        // (履歴表示で消えないようにするフォールバック)
+        "short_break" | "long_break" => Ok(SessionKind::Work),
         other => Err(AppError::Sql(format!("invalid session type: {other}"))),
     }
 }
@@ -547,15 +546,14 @@ mod tests {
 
     #[test]
     fn session_kind_str_round_trip() {
-        for k in [
-            SessionKind::Work,
-            SessionKind::ShortBreak,
-            SessionKind::LongBreak,
-        ] {
-            let s = session_kind_str(k);
-            let back = str_to_session_kind(s).expect("round trip");
-            assert_eq!(back, k);
-        }
+        let s = session_kind_str(SessionKind::Work);
+        let back = str_to_session_kind(s).expect("round trip");
+        assert_eq!(back, SessionKind::Work);
+
+        // 旧 DB の short_break / long_break レコードは Work にフォールバック
+        assert_eq!(str_to_session_kind("short_break").unwrap(), SessionKind::Work);
+        assert_eq!(str_to_session_kind("long_break").unwrap(), SessionKind::Work);
+
         assert!(str_to_session_kind("bogus").is_err());
     }
 }
