@@ -106,6 +106,14 @@
       onChange={handleDurationChange}
       onSubmit={handleDurationSubmit}
     />
+    {#if timerStore.sessionCount > 0}
+      <div
+        class="sessions"
+        aria-label="完了セッション数 {timerStore.sessionCount}"
+      >
+        {timerStore.sessionCount}<span class="unit">回</span>
+      </div>
+    {/if}
   </div>
 
   <div class="shishi-cell">
@@ -128,6 +136,19 @@
     grid-column: 1;
     grid-row: 2;
     align-self: end;
+  }
+  .sessions {
+    margin-top: 16px;
+    font-size: 14px;
+    letter-spacing: 0.3em;
+    opacity: 0.4;
+    font-variant-numeric: tabular-nums;
+  }
+  .sessions .unit {
+    font-size: 10px;
+    margin-left: 6px;
+    letter-spacing: 0.2em;
+    opacity: 0.7;
   }
   .shishi-cell {
     grid-column: 2;
