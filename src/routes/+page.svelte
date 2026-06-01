@@ -48,8 +48,11 @@
   async function handleDurationChange(seconds: number) {
     settingsStore.updateNested('durations', { work_seconds: seconds });
     try {
-      // 設定をすぐ flush し、reset を呼ぶことで pending_config を commit
-      // → メイン画面の数字が即新値に反映される
+      // バックに即時反映 (debounce 200ms を待たない)。
+      // これを待たないと machine.set_config が走る前に timer_reset を呼んで
+      // 旧 work_seconds で reset されて表示が一瞬で旧値に戻る。
+      await settingsStore.flushNow();
+      // reset で pending_config を commit → state.remaining_seconds が新値に
       await timerIpc.timerReset();
       await timerStore.init();
     } catch (e) {

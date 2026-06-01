@@ -43,6 +43,17 @@ class SettingsStore {
       console.warn('[settings] save failed:', e);
     }
   }
+
+  /** debounce を待たず即時保存。
+   *  バック側の TimerMachine.set_config を即時反映させたい場面で使う
+   *  (例: メイン時計で値変更 → 即 timer_reset で新値を反映する流れ)。 */
+  async flushNow(): Promise<void> {
+    if (this.saveTimer !== null) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    await this.flush();
+  }
 }
 
 export const settingsStore = new SettingsStore();
