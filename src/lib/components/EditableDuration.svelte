@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick, onMount } from 'svelte';
+  import { tick } from 'svelte';
   import { parseDuration, formatDuration } from '$lib/utils/duration';
 
   interface Props {
@@ -64,10 +64,16 @@
     }
   }
 
-  onMount(() => {
-    if (autoFocus && editable) {
+  // `editable` が false → true に変化したとき (例: タイマー走行中 → Idle に戻った後)
+  // も `autoFocus` が true なら自動で編集モードに入る。
+  // 初回 mount は editable=true なら lastEditable=false から始まるので同じ経路で発動。
+  let lastEditable = false;
+  $effect(() => {
+    const isNowEditable = editable;
+    if (autoFocus && isNowEditable && !lastEditable) {
       void startEdit();
     }
+    lastEditable = isNowEditable;
   });
 </script>
 
