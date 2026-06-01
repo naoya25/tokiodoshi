@@ -1,9 +1,11 @@
 <script lang="ts">
   interface Props {
     tilt: number;
+    /** Pause 中なら水流を止める (上から徐々にフェード、下の水滴は流れ切る) */
+    paused?: boolean;
   }
 
-  const { tilt }: Props = $props();
+  const { tilt, paused = false }: Props = $props();
 
   // 軸の SVG 座標。CSS transform ではなく `setAttribute('transform', ...)` で
   // SVG 座標に絶対固定するため、軸ズレが起きない
@@ -21,11 +23,29 @@
 
 <svg
   class="shishi"
+  class:paused
   viewBox="0 0 400 400"
   xmlns="http://www.w3.org/2000/svg"
   role="img"
   aria-label="ししおどし"
 >
+  <defs>
+    <!--
+      水流マスク: rect の y を 60 (= line.y1) から 220 (= line.y2 より下) に動かすことで、
+      水を「上から徐々に消す」効果を作る。
+      下方の水滴は流れ続けるので「最後の一滴まで落ちきってから止まる」見え方になる。
+    -->
+    <mask id="water-mask" maskUnits="userSpaceOnUse" x="280" y="0" width="20" height="400">
+      <rect
+        class="water-mask-rect"
+        x="280"
+        width="20"
+        height="160"
+        fill="white"
+      />
+    </mask>
+  </defs>
+
   <!-- 1. 水（上から落ちる線、筒の先端=水入り口の真上に固定） -->
   <line
     class="water"
@@ -38,6 +58,7 @@
     stroke-linecap="round"
     stroke-dasharray="3 6"
     opacity="0.55"
+    mask="url(#water-mask)"
   />
 
   <!-- 2. 筒（軸を中心に rotate 属性で回転） -->
@@ -74,5 +95,15 @@
   }
   .water {
     animation: water-fall 0.55s linear infinite;
+  }
+
+  /* マスクの矩形を上から下にスライドさせて、水を「上から消す」効果。
+     CSS の SVG geometry (y 属性) アニメーションを使う。WebKit/Blink で動く。 */
+  .water-mask-rect {
+    y: 60px;
+    transition: y 1000ms ease-out;
+  }
+  .shishi.paused .water-mask-rect {
+    y: 220px;
   }
 </style>

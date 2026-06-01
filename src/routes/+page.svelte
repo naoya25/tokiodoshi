@@ -117,7 +117,10 @@
   </div>
 
   <div class="shishi-cell">
-    <ShishiOdoshi tilt={timerStore.tilt} />
+    <ShishiOdoshi
+      tilt={timerStore.tilt}
+      paused={timerStore.phase === 'paused'}
+    />
   </div>
 </main>
 
