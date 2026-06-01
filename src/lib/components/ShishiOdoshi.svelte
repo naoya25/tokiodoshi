@@ -97,13 +97,15 @@
     animation: water-fall 0.55s linear infinite;
   }
 
-  /* マスクの矩形を上から下にスライドさせて、水を「上から消す」効果。
-     CSS の SVG geometry (y 属性) アニメーションを使う。WebKit/Blink で動く。 */
+  /* マスク矩形を「上から下へ」スライドさせて水を消す。
+     paused へ向かう時だけ transition を効かせて、resume 時は瞬時に戻すことで
+     「下から上へ水が登る」逆再生に見えるのを防ぐ。
+     resume 後は通常の dashoffset アニメで自然に「上から下へ流れる」見え方になる。 */
   .water-mask-rect {
     y: 60px;
-    transition: y 1000ms ease-out;
   }
   .shishi.paused .water-mask-rect {
     y: 220px;
+    transition: y 1000ms ease-out;
   }
 </style>
