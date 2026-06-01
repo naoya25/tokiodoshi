@@ -102,7 +102,6 @@
       editable={isIdle}
       onChange={handleDurationChange}
       onSubmit={handleDurationSubmit}
-      autoFocus
     />
   </div>
 
