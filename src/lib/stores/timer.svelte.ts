@@ -30,6 +30,9 @@ class TimerStore {
       console.warn('[timer] init failed:', e);
     }
 
+    // listener はアプリ起動中に 1 度だけ登録する。init を 2 度呼んでも二重登録しない。
+    if (this.unlistenFns.length > 0) return;
+
     this.unlistenFns.push(
       await on('timer:tick', (p) => {
         // tilt は時間経過では変えない (走行中も -12° で静止)

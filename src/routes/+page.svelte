@@ -51,6 +51,12 @@
     }
   }
 
+  /** Enter で時間を確定したとき: そのままタイマーを開始する */
+  async function handleDurationSubmit() {
+    // handleDurationChange の reset / init を待ってから start
+    await timerStore.start();
+  }
+
   function onKeydown(e: KeyboardEvent) {
     const target = e.target as HTMLElement;
     if (target.tagName === 'INPUT' || target.tagName === 'SELECT') return;
@@ -80,6 +86,8 @@
       value={displaySeconds}
       editable={isIdle}
       onChange={handleDurationChange}
+      onSubmit={handleDurationSubmit}
+      autoFocus
     />
   </div>
 

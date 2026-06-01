@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { tick, onMount } from 'svelte';
   import { parseDuration, formatDuration } from '$lib/utils/duration';
 
   interface Props {
@@ -7,11 +7,16 @@
     value: number;
     /** 編集できるかどうか (走行中は false にする) */
     editable: boolean;
-    /** 確定時に呼ばれる。秒数を受け取る */
-    onChange: (seconds: number) => void;
+    /** 確定時に呼ばれる。秒数を受け取る。async でも可 (commit は await する) */
+    onChange: (seconds: number) => void | Promise<void>;
+    /** Enter で確定したときに追加で呼ばれる (Escape / blur では呼ばれない)。
+     *  onChange の完了後に呼ばれる。例: 確定後に自動でタイマーを開始するなど */
+    onSubmit?: () => void | Promise<void>;
+    /** マウント時に自動で編集モードに入る */
+    autoFocus?: boolean;
   }
 
-  const { value, editable, onChange }: Props = $props();
+  const { value, editable, onChange, onSubmit, autoFocus = false }: Props = $props();
 
   let editing = $state(false);
   let inputValue = $state('');
@@ -27,7 +32,8 @@
     inputEl?.select();
   }
 
-  function commit() {
+  /** Enter で確定したかどうか (commit 時に true、blur 時は false) */
+  async function commit(viaEnter: boolean) {
     const sec = parseDuration(inputValue);
     if (sec === null || sec <= 0) {
       invalid = true;
@@ -36,7 +42,10 @@
     invalid = false;
     editing = false;
     if (sec !== value) {
-      onChange(sec);
+      await Promise.resolve(onChange(sec));
+    }
+    if (viaEnter) {
+      await Promise.resolve(onSubmit?.());
     }
   }
 
@@ -48,12 +57,18 @@
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter') {
       e.preventDefault();
-      commit();
+      void commit(true);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       cancel();
     }
   }
+
+  onMount(() => {
+    if (autoFocus && editable) {
+      void startEdit();
+    }
+  });
 </script>
 
 {#if editing}
@@ -61,7 +76,7 @@
     bind:this={inputEl}
     bind:value={inputValue}
     onkeydown={onKeydown}
-    onblur={commit}
+    onblur={() => void commit(false)}
     aria-label="作業時間"
     class="input"
     class:invalid
