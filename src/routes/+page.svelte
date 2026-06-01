@@ -11,6 +11,9 @@
   const canReset = $derived(timerStore.phase !== 'idle' || timerStore.sessionCount > 0);
   const isIdle = $derived(timerStore.phase === 'idle');
 
+  // EditableDuration のインスタンス参照 (R リセット時に focus() を呼ぶため)
+  let durationInputEl: { focus: () => void } | undefined = $state();
+
   // Idle かつアニメ完了後 = 「次セッションの長さ」として設定値を見せる。
   // 走行中 / Paused / カコン演出中は現セッションの残り時間を見せる。
   // → アニメ最中 (isAnimating) は remaining_seconds=0 を維持して「00:00」を見せる。
@@ -28,8 +31,11 @@
     }
   }
 
-  function handleReset() {
-    void timerStore.reset();
+  async function handleReset() {
+    await timerStore.reset();
+    // reset 後に明示的に編集モードへ。$effect の editable 変化検知に頼らないことで
+    // タイミング問題 (Idle→Idle で発火しない、tick 順序のズレ等) を回避する。
+    durationInputEl?.focus();
   }
 
   function handleSkip() {
@@ -59,12 +65,20 @@
 
   function onKeydown(e: KeyboardEvent) {
     const target = e.target as HTMLElement;
+
+    // R は input にフォーカスがあっても reset として扱う (時間入力に "r" は出てこないため)。
+    // これがないと編集モード中の R が input への "r" 入力になりリセットされない。
+    if (e.code === 'KeyR' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      void handleReset();
+      return;
+    }
+
+    // それ以外のショートカットは input/select の通常入力を妨げない
     if (target.tagName === 'INPUT' || target.tagName === 'SELECT') return;
     if (e.code === 'Space') {
       e.preventDefault();
       handleToggle();
-    } else if (e.code === 'KeyR') {
-      handleReset();
     } else if (e.code === 'KeyS') {
       handleSkip();
     }
@@ -83,6 +97,7 @@
 <main>
   <div class="timer-cell">
     <EditableDuration
+      bind:this={durationInputEl}
       value={displaySeconds}
       editable={isIdle}
       onChange={handleDurationChange}

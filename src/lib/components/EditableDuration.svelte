@@ -32,6 +32,12 @@
     inputEl?.select();
   }
 
+  /** 外部から編集モードを発動するための API。
+   *  `bind:this` 経由でメインページの handleReset などから呼ぶ。 */
+  export const focus = () => {
+    void startEdit();
+  };
+
   /** Enter で確定したかどうか (commit 時に true、blur 時は false) */
   async function commit(viaEnter: boolean) {
     const sec = parseDuration(inputValue);
