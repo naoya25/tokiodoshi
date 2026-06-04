@@ -14,7 +14,7 @@
 </script>
 
 <svelte:head>
-  <title>トキオドシ / 設定</title>
+  <title>tokiodoshi / 設定</title>
 </svelte:head>
 
 <main>

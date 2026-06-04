@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "トキオドシ",
+  "productName": "tokiodoshi",
   "version": "0.1.0",
   "identifier": "com.naoya.tokiodoshi",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "トキオドシ",
+        "title": "tokiodoshi",
         "width": 720,
         "height": 540,
         "minWidth": 480,

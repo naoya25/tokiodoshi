@@ -31,7 +31,7 @@
 </script>
 
 <svelte:head>
-  <title>トキオドシ / 履歴</title>
+  <title>tokiodoshi / 履歴</title>
 </svelte:head>
 
 <main>
