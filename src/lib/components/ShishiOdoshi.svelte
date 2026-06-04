@@ -61,16 +61,46 @@
     mask="url(#water-mask)"
   />
 
-  <!-- 2. 筒（軸を中心に rotate 属性で回転） -->
+  <!-- 2. 筒（軸を中心に rotate 属性で回転）
+       右端は斜めにカット（開口部が上向き=水を受ける向き）。
+       top edge は x:290 で終わり、bottom tip が x:314 まで伸びる。 -->
   <g bind:this={bambooEl}>
-    <rect
-      x="140"
-      y="232"
-      width="160"
-      height="16"
+    <!-- 本体: 右端を斜めにカットした筒（cut faces up） -->
+    <path
+      d="M 140 232 L 290 232 L 314 248 L 140 248 Z"
       fill="none"
       stroke="currentColor"
       stroke-width="1.2"
+      stroke-linejoin="round"
+    />
+
+    <!-- 斜めカットの内側リム: カット線の少し内側に沿った曲線で中空の円筒感を匂わせる -->
+    <path
+      d="M 292 234 Q 302 242 311 247"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="0.8"
+      opacity="0.4"
+    />
+
+    <!-- 左端の節 (閉じた cap): 内側に薄いカーブを置いて円筒の奥行きを示す -->
+    <path
+      d="M 142 234 Q 145 240 142 246"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="0.7"
+      opacity="0.5"
+    />
+
+    <!-- 竹の節 (節間の境界線) -->
+    <line
+      x1="215"
+      y1="232"
+      x2="215"
+      y2="248"
+      stroke="currentColor"
+      stroke-width="0.7"
+      opacity="0.55"
     />
   </g>
 
